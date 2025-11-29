@@ -8,6 +8,7 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import Header from "../components/Header";
 import {
@@ -23,6 +24,16 @@ const dateToIso = (date) => date.toISOString().slice(0, 10);
 const HomePage = () => {
   const navigate = useNavigate();
   const calendarRef = useRef(null);
+
+<div style={{ marginBottom: "20px" }}>
+  <Link to="/login" style={{ marginRight: "10px" }}>
+    <button>Login</button>
+  </Link>
+
+  <Link to="/register">
+    <button>Create Account</button>
+  </Link>
+</div>
 
   // ------------------------
   // STATE

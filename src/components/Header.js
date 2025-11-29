@@ -1,7 +1,7 @@
 // src/components/Header.js
 
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import logo from "../assets/logo.png";
 
 const Header = () => {
@@ -18,12 +18,17 @@ const Header = () => {
       </div>
 
       <nav style={styles.nav}>
+        {/* HOME BUTTON */}
         <button style={styles.navButton} onClick={() => navigate("/")}>
           Home
         </button>
-        <button style={styles.navButton} onClick={() => navigate("/helper/login")}>
-          Log In
-        </button>
+
+        {/* LOGIN BUTTON – FIXED */}
+        <Link to="/login">
+          <button style={styles.navButton}>Log In</button>
+        </Link>
+
+        {/* CONTACT BUTTON */}
         <button style={styles.navButton} onClick={() => navigate("/contact")}>
           Contact
         </button>

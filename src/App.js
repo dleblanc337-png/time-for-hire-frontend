@@ -10,6 +10,8 @@ import CustomerLogin from "./pages/CustomerLogin";
 import BookingPage from "./pages/BookingPage";
 import HelperDashboard from "./pages/HelperDashboard";
 import ContactPage from "./pages/ContactPage";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 
 const App = () => {
   return (
@@ -21,6 +23,8 @@ const App = () => {
         <Route path="/book" element={<BookingPage />} />
         <Route path="/helper/dashboard" element={<HelperDashboard />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
       </Routes>
     </Router>
   );
