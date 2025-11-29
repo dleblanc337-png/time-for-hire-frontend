@@ -1,0 +1,161 @@
+/* src/styles/calendarStyles.css */
+
+/* ---------- Overall layout ---------- */
+
+.tfh-home-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px 24px 40px;
+  display: flex;
+  gap: 20px;
+  box-sizing: border-box;
+}
+
+.tfh-left-panel {
+  width: 300px;
+  background: #f2f5fa;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #dde4ef;
+  box-sizing: border-box;
+}
+
+.tfh-center-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.tfh-right-panel {
+  width: 260px;
+  box-sizing: border-box;
+}
+
+.tfh-right-panel h3 {
+  margin-top: 0;
+}
+
+/* ---------- Tabs ---------- */
+
+.tfh-tabs-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tfh-tab {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.tfh-tab-active {
+  background: #0055aa;
+  color: #ffffff;
+}
+
+.tfh-tab-inactive {
+  background: #d9dee7;
+  color: #003366;
+}
+
+/* ---------- Form elements ---------- */
+
+.tfh-label {
+  display: block;
+  margin-top: 10px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tfh-input {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #c5ccd8;
+  margin-top: 4px;
+  box-sizing: border-box;
+}
+
+.tfh-price-row {
+  display: flex;
+  gap: 8px;
+}
+
+.tfh-price-row .tfh-input {
+  flex: 1;
+}
+
+/* ---------- Suggestions ---------- */
+
+.tfh-suggestions {
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #bcc6d2;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  padding: 8px;
+  margin-top: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 13px;
+}
+
+.tfh-suggestions-header {
+  font-size: 11px;
+  margin-top: 6px;
+  margin-bottom: 3px;
+  font-weight: bold;
+  color: #444;
+}
+
+.tfh-suggestion-item {
+  padding: 4px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.tfh-suggestion-item:hover {
+  background: #eef3ff;
+}
+
+/* ---------- Helper cards ---------- */
+
+.tfh-helper-card {
+  background: #ffffff;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #d0d9e6;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.tfh-book-button {
+  margin-top: 6px;
+  background: #0055aa;
+  border: none;
+  padding: 8px 12px;
+  color: #ffffff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* ---------- FullCalendar: grid, today & selected ---------- */
+
+.fc .fc-daygrid-day-frame {
+  border: 1px solid #e0e6ef; /* subtle grid lines */
+  box-sizing: border-box;
+}
+
+/* Today (yellow) */
+.fc .tfh-day-today .fc-daygrid-day-frame {
+  background-color: #fff7d1;
+}
+
+/* Selected date: blue border + light gray/blue fill */
+.fc .tfh-day-selected .fc-daygrid-day-frame {
+  border: 2px solid #0055aa;
+  background-color: #eef3ff;
+}
