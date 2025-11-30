@@ -10,7 +10,6 @@ import interactionPlugin from "@fullcalendar/interaction";
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 
-import Header from "../components/Header";
 import {
   SERVICE_CATEGORIES,
   ALL_SERVICE_SUGGESTIONS,
@@ -225,7 +224,6 @@ const HomePage = () => {
   // ------------------------
   return (
     <>
-      <Header />
 
       <div className="tfh-home-container">
         {/* LEFT FILTER PANEL */}
