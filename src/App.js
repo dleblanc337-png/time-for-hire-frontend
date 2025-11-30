@@ -15,6 +15,7 @@ function App() {
   return (
     <Router>
       <Header />   {/* ALWAYS AT TOP */}
+<Header isLoggedIn={isLoggedIn} onLogout={handleLogout} />
 
       <Routes>
         <Route path="/" element={<HomePage />} />
