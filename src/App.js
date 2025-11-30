@@ -1,33 +1,37 @@
-// ================================================
-// APP.JS — CLEAN ROUTING + SINGLE HEADER
-// ================================================
+// frontend/src/App.js
+
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
+import Header from "./components/Header";
 import HomePage from "./pages/HomePage";
-import HelperLogin from "./pages/HelperLogin";
-import CustomerLogin from "./pages/CustomerLogin";
-import BookingPage from "./pages/BookingPage";
-import HelperDashboard from "./pages/HelperDashboard";
-import ContactPage from "./pages/ContactPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import CustomerDashboard from "./pages/CustomerDashboard";
+import HelperDashboard from "./pages/HelperDashboard";
 
-const App = () => {
+function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/helper/login" element={<HelperLogin />} />
-        <Route path="/customer/login" element={<CustomerLogin />} />
-        <Route path="/book" element={<BookingPage />} />
-        <Route path="/helper/dashboard" element={<HelperDashboard />} />
-        <Route path="/contact" element={<ContactPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-      </Routes>
+      {/* 🔵 BLUE HEADER ALWAYS VISIBLE */}
+      <Header />
+
+      {/* 🔽 PAGE CONTENT BELOW HEADER */}
+      <div style={{ marginTop: "100px" }}>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+
+          {/* Auth pages */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+
+          {/* Dashboards */}
+          <Route path="/dashboard" element={<CustomerDashboard />} />
+          <Route path="/helper-dashboard" element={<HelperDashboard />} />
+        </Routes>
+      </div>
     </Router>
   );
-};
+}
 
 export default App;
