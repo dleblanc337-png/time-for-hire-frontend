@@ -1,5 +1,4 @@
-// frontend/src/App.js
-
+// src/App.js
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
@@ -7,22 +6,26 @@ import Header from "./components/Header";
 import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import CustomerDashboard from "./pages/CustomerDashboard";
-import HelperDashboard from "./pages/HelperDashboard";
+
+// OPTIONAL: add these later if needed
+// import Contact from "./pages/Contact";
+// import Services from "./pages/Services";
 
 function App() {
   return (
-  <>
-    <Header />
+    <Router>
+      <Header />   {/* ALWAYS AT TOP */}
 
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/dashboard" element={<CustomerDashboard />} />
-    </Routes>
-  </>
-);
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+
+        {/* 404 fallback */}
+        <Route path="*" element={<div style={{ padding: "20px" }}>Page not found</div>} />
+      </Routes>
+    </Router>
+  );
 }
 
 export default App;
