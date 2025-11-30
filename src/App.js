@@ -12,26 +12,17 @@ import HelperDashboard from "./pages/HelperDashboard";
 
 function App() {
   return (
-    <Router>
-      {/* 🔵 BLUE HEADER ALWAYS VISIBLE */}
-      <Header />
+  <>
+    <Header />
 
-      {/* 🔽 PAGE CONTENT BELOW HEADER */}
-      <div style={{ marginTop: "100px" }}>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-
-          {/* Auth pages */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-
-          {/* Dashboards */}
-          <Route path="/dashboard" element={<CustomerDashboard />} />
-          <Route path="/helper-dashboard" element={<HelperDashboard />} />
-        </Routes>
-      </div>
-    </Router>
-  );
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/dashboard" element={<CustomerDashboard />} />
+    </Routes>
+  </>
+);
 }
 
 export default App;
