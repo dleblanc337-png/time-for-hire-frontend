@@ -1,61 +1,30 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+// src/components/Header.js
+import React from "react";
+import { Link } from "react-router-dom";
 
 function Header() {
-  const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  // Detect login state on page load
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    setIsLoggedIn(!!token);
-  }, []);
-
   return (
-    <header className="header">
-      <div className="header-left">
-        {/* Logo / Home Button */}
-        <h1 style={{ cursor: "pointer" }} onClick={() => navigate("/")}>
-          Time For Hire
-        </h1>
+    <header
+      style={{
+        width: "100%",
+        padding: "20px",
+        backgroundColor: "#0d47a1",
+        color: "white",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        boxSizing: "border-box",
+      }}
+    >
+      <div style={{ fontSize: "24px", fontWeight: "bold" }}>
+        Time For Hire
       </div>
 
-      <div className="header-right">
-
-        {/* If NOT logged in */}
-        {!isLoggedIn && (
-          <>
-            <button className="nav-button" onClick={() => navigate("/login")}>
-              Login
-            </button>
-
-            <button className="nav-button" onClick={() => navigate("/register")}>
-              Create Account
-            </button>
-          </>
-        )}
-
-        {/* If logged in */}
-        {isLoggedIn && (
-          <>
-            <button className="nav-button" onClick={() => navigate("/dashboard")}>
-              My Dashboard
-            </button>
-
-            <button
-              className="nav-button"
-              onClick={() => {
-                localStorage.removeItem("token");
-                navigate("/");
-                window.location.reload();
-              }}
-            >
-              Log Out
-            </button>
-          </>
-        )}
-
-      </div>
+      <nav style={{ display: "flex", gap: "15px" }}>
+        <Link to="/" style={{ color: "white" }}>Home</Link>
+        <Link to="/login" style={{ color: "white" }}>Login</Link>
+        <Link to="/register" style={{ color: "white" }}>Create Account</Link>
+      </nav>
     </header>
   );
 }
