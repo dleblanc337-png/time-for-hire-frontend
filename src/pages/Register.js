@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 
+const API_URL = "https://time-for-hire-backend.onrender.com/api";
+
 function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
