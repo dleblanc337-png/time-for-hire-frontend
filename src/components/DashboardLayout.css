@@ -1,0 +1,32 @@
+.dashboard-container {
+    display: flex;
+    min-height: 80vh;
+}
+
+.dashboard-sidebar {
+    width: 240px;
+    background: #f5f5f5;
+    padding: 20px;
+    border-right: 2px solid #ddd;
+}
+
+.dashboard-sidebar h2 {
+    margin-bottom: 20px;
+}
+
+.dashboard-sidebar a {
+    display: block;
+    margin-bottom: 12px;
+    text-decoration: none;
+    color: #003366;
+    font-weight: 500;
+}
+
+.dashboard-sidebar a:hover {
+    text-decoration: underline;
+}
+
+.dashboard-content {
+    flex: 1;
+    padding: 20px;
+}
