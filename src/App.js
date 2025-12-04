@@ -6,8 +6,8 @@ import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
-import CustomerDashboard from "./pages/customer/CustomerDashboard";
-import HelperDashboard from "./pages/helper/HelperDashboard";
+import CustomerDashboard from "./pages/CustomerDashboard";
+import HelperDashboard from "./pages/HelperDashboard";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
