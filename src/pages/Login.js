@@ -1,76 +1,32 @@
-import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+const handleLogin = async () => {
+  try {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
 
-const API_URL = "https://time-for-hire-backend.onrender.com/api";
+    const data = await res.json();
 
-function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
-  const navigate = useNavigate();
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-
-    try {
-    const response = await fetch("https://time-for-hire-backend.onrender.com/api/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-});
-
-      const data = await response.json();
-
-      if (response.ok) {
-        // ✅ Save user in browser
-        localStorage.setItem("user", JSON.stringify(data.user));
-
-        setMessage("Login successful! Redirecting...");
-
-        // ✅ Redirect to home (or later: dashboard)
-        setTimeout(() => {
-          navigate("/");
-        }, 800);
-      } else {
-        setMessage(data.message || "Login failed");
-      }
-    } catch (error) {
-      console.error("Login error:", error);
-      setMessage("Error connecting to server");
+    if (!res.ok) {
+      alert(data.message || "Login failed");
+      return;
     }
-  };
 
-  return (
-    <div style={{ padding: "20px" }}>
-      <h2>Login</h2>
+    // Save token + role + logged-in state
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("role", data.user.role);
+    localStorage.setItem("isLoggedIn", "true");
 
-      <form onSubmit={handleLogin}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        /><br /><br />
+    // Redirect based on role
+    if (data.user.role === "helper") {
+      navigate("/helper-dashboard");
+    } else {
+      navigate("/customer-dashboard");
+    }
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        /><br /><br />
-
-        <button type="submit">Login</button>
-      </form>
-
-      {message && <p>{message}</p>}
-<p>
-  Don’t have an account?{" "}
-  <Link to="/register">Create one</Link>
-</p>
-    </div>
-  );
-}
-
-export default Login;
+  } catch (error) {
+    console.error("Login error:", error);
+    alert("Something went wrong");
+  }
+};
