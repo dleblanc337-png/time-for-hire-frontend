@@ -1,81 +1,67 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+
 import Header from "./components/Header";
 import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import HelperDashboard from "./pages/HelperDashboard";
-import CustomerDashboard from "./pages/CustomerDashboard";
-import ProtectedRoute from "./components/ProtectedRoute";
-import CustomerBookings from "./pages/CustomerBookings";
-import CustomerMessages from "./pages/CustomerMessages";
-import HelperJobs from "./pages/HelperJobs";
-import HelperMessages from "./pages/HelperMessages";
 
-const storedUser = JSON.parse(localStorage.getItem("user") || "null");
+import CustomerDashboard from "./pages/customer/CustomerDashboard";
+import HelperDashboard from "./pages/helper/HelperDashboard";
+
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [role, setRole] = useState(null);
+
+  useEffect(() => {
+    const raw = localStorage.getItem("user");
+    if (!raw) return;
+
+    try {
+      const user = JSON.parse(raw);
+      setIsLoggedIn(true);
+      setRole(user.role);
+    } catch {
+      localStorage.removeItem("user");
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    setIsLoggedIn(false);
+    setRole(null);
+  };
+
   return (
     <Router>
-      {/* Header no longer expects props */}
-      <Header />
+      <Header isLoggedIn={isLoggedIn} onLogout={handleLogout} />
 
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<Login setIsLoggedIn={setIsLoggedIn} />} />
         <Route path="/register" element={<Register />} />
+
+        {/* CUSTOMER dashboard */}
         <Route
-  path="/helper-dashboard"
-  element={
-    <ProtectedRoute allowedRoles={["helper"]}>
-      <HelperDashboard />
-    </ProtectedRoute>
-  }
-/>
-        <Route  path="/customer-dashboard"element={
-    <ProtectedRoute allowedRoles={["customer"]}>
-      <CustomerDashboard />
-    </ProtectedRoute>
-  }
-/>{/* Customer pages */}
-<Route
-  path="/customer-bookings"
-  element={
-    <ProtectedRoute allowedRoles={["customer"]}>
-      <CustomerBookings />
-    </ProtectedRoute>
-  }
-/>
+          path="/customer/dashboard"
+          element={
+            <ProtectedRoute allowed={["customer"]}>
+              <CustomerDashboard />
+            </ProtectedRoute>
+          }
+        />
 
-<Route
-  path="/customer-messages"
-  element={
-    <ProtectedRoute allowedRoles={["customer"]}>
-      <CustomerMessages />
-    </ProtectedRoute>
-  }
-/>
-
-{/* Helper pages */}
-<Route
-  path="/helper-jobs"
-  element={
-    <ProtectedRoute allowedRoles={["helper"]}>
-      <HelperJobs />
-    </ProtectedRoute>
-  }
-/>
-
-<Route
-  path="/helper-messages"
-  element={
-    <ProtectedRoute allowedRoles={["helper"]}>
-      <HelperMessages />
-    </ProtectedRoute>
-  }
-/>
-
-
+        {/* HELPER dashboard */}
+        <Route
+          path="/helper/dashboard"
+          element={
+            <ProtectedRoute allowed={["helper"]}>
+              <HelperDashboard />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </Router>
   );
