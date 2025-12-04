@@ -12,6 +12,8 @@ import CustomerMessages from "./pages/CustomerMessages";
 import HelperJobs from "./pages/HelperJobs";
 import HelperMessages from "./pages/HelperMessages";
 
+const storedUser = JSON.parse(localStorage.getItem("user") || "null");
+
 function App() {
   return (
     <Router>

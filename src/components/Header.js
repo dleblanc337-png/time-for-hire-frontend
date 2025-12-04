@@ -7,7 +7,7 @@ function Header({ isLoggedIn }) {
     const navigate = useNavigate();
 
     // Read user info from localStorage
-    const user = JSON.parse(localStorage.getItem("user"));
+    const user = JSON.parse(localStorage.getItem("user") || "null");
     const role = user?.role;
 
     const handleLogout = () => {

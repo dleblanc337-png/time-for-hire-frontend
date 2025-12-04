@@ -2,6 +2,8 @@ import React from "react";
 import { Link } from "react-router-dom";
 import "./DashboardLayout.css";
 
+const user = JSON.parse(localStorage.getItem("user") || "null");
+
 function DashboardLayout({ children, role }) {
     return (
         <div className="dashboard-container">
