@@ -1,13 +1,13 @@
 import React from "react";
 import DashboardLayout from "../components/DashboardLayout";
 
-function HelperMessages() {
+function CustomerMessages() {
     return (
-        <DashboardLayout role="helper">
+        <DashboardLayout role="customer">
             <h1>Messages</h1>
-            <p>(Helper messaging feature coming soon)</p>
+            <p>(Customer messaging feature coming soon)</p>
         </DashboardLayout>
     );
 }
 
-export default HelperMessages;
+export default CustomerMessages;
