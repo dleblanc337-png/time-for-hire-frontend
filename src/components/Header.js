@@ -3,57 +3,80 @@ import { Link, useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 import "./Header.css";
 
-function Header({ isLoggedIn }) {
-    const navigate = useNavigate();
+function Header() {
+  const navigate = useNavigate();
 
-    // Read user info from localStorage
-    const user = JSON.parse(localStorage.getItem("user") || "null");
-    const role = user?.role;
+  // Safely read user from localStorage
+  let user = null;
+  const storedUser = localStorage.getItem("tfh_user");
 
-    const handleLogout = () => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        navigate("/");
-        window.location.reload();
-    };
+  if (storedUser && storedUser !== "undefined") {
+    try {
+      user = JSON.parse(storedUser);
+    } catch (err) {
+      console.error("Error parsing tfh_user from localStorage", err);
+      // If it’s bad JSON, clear it so it doesn’t break again
+      localStorage.removeItem("tfh_user");
+    }
+  }
 
-    return (
-        <header className="tfh-header">
-            <div className="tfh-header-left">
-                <img src={logo} alt="Time For Hire Logo" className="tfh-logo-image" />
+  const isLoggedIn = !!user?.token;
+  const role = user?.role || "customer";
 
-                <div className="tfh-title-group">
-                    <span className="tfh-title">Time For Hire</span>
-                    <span className="tfh-slogan">MAKE IT WORK</span>
-                </div>
-            </div>
+  const handleLogout = () => {
+    localStorage.removeItem("tfh_user");
+    navigate("/login");
+  };
 
-            <nav className="tfh-nav">
-                <Link to="/">Home</Link>
+  const dashboardPath =
+    role === "helper" ? "/helper/dashboard" : "/customer/dashboard";
 
-                {!isLoggedIn && (
-                    <>
-                        <Link to="/login">Login</Link>
-                        <Link to="/register">Create Account</Link>
-                    </>
-                )}
+  const dashboardLabel =
+    role === "helper" ? "My Helper Dashboard" : "My Dashboard";
 
-                {isLoggedIn && role === "customer" && (
-                    <Link to="/customer-dashboard">My Dashboard</Link>
-                )}
+  return (
+    <header className="tfh-header">
+      <div className="tfh-header-left">
+        <Link to="/" className="tfh-logo-link">
+          <img
+            src={logo}
+            alt="Time For Hire Logo"
+            className="tfh-logo-image"
+          />
+          <div className="tfh-title-group">
+            <span className="tfh-title">Time For Hire</span>
+            <span className="tfh-slogan">MAKE IT WORK</span>
+          </div>
+        </Link>
+      </div>
 
-                {isLoggedIn && role === "helper" && (
-                    <Link to="/helper-dashboard">My Dashboard</Link>
-                )}
+      <nav className="tfh-header-right">
+        <Link to="/" className="tfh-nav-link">
+          Home
+        </Link>
 
-                {isLoggedIn && (
-                    <button className="tfh-logout-btn" onClick={handleLogout}>
-                        Logout
-                    </button>
-                )}
-            </nav>
-        </header>
-    );
+        {isLoggedIn ? (
+          <>
+            <Link to={dashboardPath} className="tfh-nav-link">
+              {dashboardLabel}
+            </Link>
+            <button className="tfh-nav-button" onClick={handleLogout}>
+              Log Out
+            </button>
+          </>
+        ) : (
+          <>
+            <Link to="/login" className="tfh-nav-link">
+              Login
+            </Link>
+            <Link to="/register" className="tfh-nav-link">
+              Create Account
+            </Link>
+          </>
+        )}
+      </nav>
+    </header>
+  );
 }
 
 export default Header;

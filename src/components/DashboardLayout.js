@@ -1,32 +1,69 @@
 import React from "react";
-import "./DashboardLayout.css";
 import { Link } from "react-router-dom";
+import "./DashboardLayout.css";
 
-function DashboardLayout({ children }) {
-  // Safely load user from localStorage
-  const storedUser = localStorage.getItem("user");
+function DashboardLayout({ title, children }) {
+  // Safely read user/role from localStorage
   let user = null;
+  const storedUser = localStorage.getItem("tfh_user");
 
-  try {
-    user = storedUser ? JSON.parse(storedUser) : null;
-  } catch (err) {
-    console.error("Invalid JSON in localStorage 'user'", err);
-    user = null;
+  if (storedUser && storedUser !== "undefined") {
+    try {
+      user = JSON.parse(storedUser);
+    } catch (err) {
+      console.error("Error parsing tfh_user in DashboardLayout", err);
+      localStorage.removeItem("tfh_user");
+    }
   }
 
+  const role = user?.role || "customer";
+  const base = role === "helper" ? "/helper" : "/customer";
+
   return (
-    <div style={{ padding: "20px" }}>
-      <h2>Dashboard</h2>
+    <div className="dashboard-layout">
+      <aside className="dashboard-sidebar">
+        <h2>{title}</h2>
+        <ul>
+          {/* Common overview */}
+          <li>
+            <Link to={`${base}/dashboard`}>Overview</Link>
+          </li>
 
-      {user ? (
-        <p>Logged in as: <strong>{user.email}</strong></p>
-      ) : (
-        <p style={{ color: "red" }}>No user loaded.</p>
-      )}
+          {role === "helper" ? (
+            <>
+              <li>
+                <Link to={`${base}/jobs`}>My Jobs</Link>
+              </li>
+              <li>
+                <Link to={`${base}/messages`}>Messages</Link>
+              </li>
+              <li>
+                <Link to={`${base}/earnings`}>Earnings</Link>
+              </li>
+              <li>
+                <Link to={`${base}/availability`}>Availability</Link>
+              </li>
+              <li>
+                <Link to={`${base}/profile`}>Profile</Link>
+              </li>
+            </>
+          ) : (
+            <>
+              <li>
+                <Link to={`${base}/bookings`}>My Bookings</Link>
+              </li>
+              <li>
+                <Link to={`${base}/messages`}>Messages</Link>
+              </li>
+              <li>
+                <Link to={`${base}/profile`}>Profile</Link>
+              </li>
+            </>
+          )}
+        </ul>
+      </aside>
 
-      <div style={{ marginTop: "20px" }}>
-        {children}
-      </div>
+      <main className="dashboard-content">{children}</main>
     </div>
   );
 }
