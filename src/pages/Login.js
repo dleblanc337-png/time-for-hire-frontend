@@ -1,32 +1,23 @@
-const handleLogin = async () => {
-  try {
-    const res = await fetch(`${process.env.REACT_APP_API_URL}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
+const handleLogin = async (e) => {
+    e.preventDefault();
 
-    const data = await res.json();
+    try {
+        const response = await axios.post(
+            `${process.env.REACT_APP_API_URL}/auth/login`,
+            { email, password }
+        );
 
-    if (!res.ok) {
-      alert(data.message || "Login failed");
-      return;
+        // Save token + user
+        localStorage.setItem("token", response.data.token);
+        localStorage.setItem("user", JSON.stringify(response.data.user));
+
+        // Redirect dynamically based on role
+        if (response.data.user.role === "helper") {
+            navigate("/helper-dashboard");
+        } else {
+            navigate("/customer-dashboard");
+        }
+    } catch (err) {
+        setError("Invalid email or password.");
     }
-
-    // Save token + role + logged-in state
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("role", data.user.role);
-    localStorage.setItem("isLoggedIn", "true");
-
-    // Redirect based on role
-    if (data.user.role === "helper") {
-      navigate("/helper-dashboard");
-    } else {
-      navigate("/customer-dashboard");
-    }
-
-  } catch (error) {
-    console.error("Login error:", error);
-    alert("Something went wrong");
-  }
 };
