@@ -45,7 +45,7 @@ function App() {
 
         {/* CUSTOMER dashboard */}
         <Route
-          path="/customer/dashboard"
+          path="/customer-dashboard"
           element={
             <ProtectedRoute allowed={["customer"]}>
               <CustomerDashboard />
