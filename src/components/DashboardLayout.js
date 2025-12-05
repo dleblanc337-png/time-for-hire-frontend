@@ -9,10 +9,10 @@ function DashboardLayout({ children }) {
         <h2 className="sidebar-title">Dashboard</h2>
 
         <nav className="dashboard-nav">
-          <Link to="/customer" className="nav-item">Home</Link>
-          <Link to="/customer/bookings" className="nav-item">My Bookings</Link>
-          <Link to="/customer/messages" className="nav-item">Messages</Link>
-          <Link to="/customer/profile" className="nav-item">Profile</Link>
+          <Link to="/customer-dashboard/home" className="nav-item">Home</Link>
+          <Link to="/customer-dashboard/bookings" className="nav-item">My Bookings</Link>
+          <Link to="/customer-dashboard/messages" className="nav-item">Messages</Link>
+          <Link to="/customer-dashboard/profile" className="nav-item">Profile</Link>
         </nav>
       </aside>
 

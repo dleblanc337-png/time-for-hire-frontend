@@ -11,6 +11,11 @@ import HelperDashboard from "./pages/HelperDashboard";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
+import CustomerHome from "./pages/CustomerHome";
+import CustomerBookings from "./pages/CustomerBookings";
+import CustomerMessages from "./pages/CustomerMessages";
+import CustomerProfile from "./pages/CustomerProfile";
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [role, setRole] = useState(null);
@@ -63,6 +68,69 @@ function App() {
           }
         />
       </Routes>
+      {/* CUSTOMER subpages */}
+<Route
+  path="/customer-dashboard/home"
+  element={
+    <ProtectedRoute allowed={["customer"]}>
+      <CustomerHome />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/customer-dashboard/bookings"
+  element={
+    <ProtectedRoute allowed={["customer"]}>
+      <CustomerBookings />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/customer-dashboard/messages"
+  element={
+    <ProtectedRoute allowed={["customer"]}>
+      <CustomerMessages />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/customer-dashboard/profile"
+  element={
+    <ProtectedRoute allowed={["customer"]}>
+      <CustomerProfile />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/customer/bookings"
+  element={
+    <ProtectedRoute allowed={["customer"]}>
+      <CustomerBookings />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/customer/messages"
+  element={
+    <ProtectedRoute allowed={["customer"]}>
+      <CustomerMessages />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/customer/profile"
+  element={
+    <ProtectedRoute allowed={["customer"]}>
+      <CustomerProfile />
+    </ProtectedRoute>
+  }
+/>
     </Router>
   );
 }
