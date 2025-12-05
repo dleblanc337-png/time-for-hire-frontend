@@ -6,68 +6,82 @@ import "./Header.css";
 function Header() {
   const navigate = useNavigate();
 
-  // --- SAFE LOCALSTORAGE PARSE ---
-  let user = null;
+  // Read login state from localStorage
+  let isLoggedIn = false;
   let role = null;
+  let user = null;
 
   try {
-    const raw = localStorage.getItem("user");
-    if (raw) {
-      user = JSON.parse(raw);
-      role = user?.role || null;
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      user = JSON.parse(storedUser);
+      role = user.role;
+      isLoggedIn = true;
     }
-  } catch (err) {
-    console.error("Invalid user JSON → clearing storage");
-    localStorage.removeItem("user");
+  } catch (e) {
+    console.error("Error parsing user from localStorage", e);
   }
 
-  const isLoggedIn = !!user;
-
   const handleLogout = () => {
-    localStorage.clear();
-    navigate("/login");
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("role");
+    localStorage.removeItem("isLoggedIn");
+    navigate("/");
     window.location.reload();
   };
 
   return (
     <header className="tfh-header">
       <div className="tfh-header-left">
-        <img src={logo} alt="Time For Hire Logo" className="tfh-logo-image" />
+        <img src={logo} alt="Time For Hire logo" className="tfh-logo-image" />
+
         <div className="tfh-title-group">
           <span className="tfh-title">Time For Hire</span>
           <span className="tfh-slogan">MAKE IT WORK</span>
         </div>
       </div>
 
-      <nav className="tfh-nav">
+      <nav className="tfh-header-right">
+        {/* Always show Home */}
+        <Link to="/" className="tfh-nav-link">
+          Home
+        </Link>
+
+        {/* Not logged in → Login + Create Account */}
         {!isLoggedIn && (
           <>
-            <Link to="/">Home</Link>
-            <Link to="/login">Login</Link>
-            <Link to="/register">Create Account</Link>
+            <Link to="/login" className="tfh-nav-link">
+              Login
+            </Link>
+            <Link to="/register" className="tfh-nav-link">
+              Create Account
+            </Link>
           </>
         )}
 
+        {/* Logged in as CUSTOMER */}
         {isLoggedIn && role === "customer" && (
           <>
-            <Link to="/customer/dashboard">Dashboard</Link>
-            <Link to="/customer/bookings">Bookings</Link>
-            <Link to="/customer/messages">Messages</Link>
+            <Link to="/customer-dashboard" className="tfh-nav-link">
+              My Dashboard
+            </Link>
+            <button className="tfh-logout-btn" onClick={handleLogout}>
+              Log Out
+            </button>
           </>
         )}
 
+        {/* Logged in as HELPER */}
         {isLoggedIn && role === "helper" && (
           <>
-            <Link to="/helper/dashboard">Dashboard</Link>
-            <Link to="/helper/jobs">Jobs</Link>
-            <Link to="/helper/messages">Messages</Link>
+            <Link to="/helper-dashboard" className="tfh-nav-link">
+              Helper Dashboard
+            </Link>
+            <button className="tfh-logout-btn" onClick={handleLogout}>
+              Log Out
+            </button>
           </>
-        )}
-
-        {isLoggedIn && (
-          <button className="tfh-logout-btn" onClick={handleLogout}>
-            Logout
-          </button>
         )}
       </nav>
     </header>

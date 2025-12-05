@@ -1,59 +1,88 @@
-/* WHOLE HEADER BAR */
+/* Full top banner */
 .tfh-header {
-  background-color: #0b3a63;      /* deep blue to match logo background */
-  padding: 12px 25px;
+  width: 100%;
+  height: 90px;
+  background-color: #0b3a63; /* deep blue */
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0 32px;
+  box-sizing: border-box;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
 }
 
-/* LEFT SIDE (logo + text) */
+/* Left side: logo + text */
 .tfh-header-left {
   display: flex;
   align-items: center;
+  gap: 16px;
 }
 
-/* LOGO IMAGE */
 .tfh-logo-image {
-  height: 60px;                  /* size of logo */
+  height: 60px;
   width: auto;
-  margin-right: 18px;            /* spacing between logo and text */
 }
 
-/* TEXT GROUP: Title + Slogan */
+/* Title + slogan */
 .tfh-title-group {
   display: flex;
   flex-direction: column;
   line-height: 1.1;
 }
 
-/* BIG TITLE "Time For Hire" */
 .tfh-title {
-  font-size: 26px;
-  font-weight: bold;
-  color: white;                  /* bright white */
-  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #ffffff;
 }
 
-/* SMALL SLOGAN "MAKE IT WORK" */
 .tfh-slogan {
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 5px;
-  color: #d4d4d4;                /* silver-like text */
+  color: #d4d4d4;
   margin-top: 3px;
 }
 
-/* RIGHT SIDE NAVIGATION LINKS */
-.tfh-header-right a {
-  margin-left: 25px;
-  color: white;
+/* Right side: navigation links + buttons */
+.tfh-header-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+/* Links (Home, Login, Create Account, Dashboard, etc.) */
+.tfh-nav-link {
+  color: #ffffff;
   text-decoration: none;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
 }
 
-/* HOVER EFFECT */
-.tfh-header-right a:hover {
+/* remove purple visited color */
+.tfh-nav-link:visited {
+  color: #ffffff;
+}
+
+.tfh-nav-link:hover {
   text-decoration: underline;
   opacity: 0.85;
+}
+
+/* Log Out button */
+.tfh-logout-btn {
+  background: transparent;
+  border: 1px solid #ffffff;
+  border-radius: 4px;
+  padding: 6px 14px;
+  color: #ffffff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tfh-logout-btn:hover {
+  background-color: #ffffff;
+  color: #0b3a63;
 }
