@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Route, Switch } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
@@ -14,19 +14,19 @@ import CustomerMessages from "./pages/CustomerMessages";
 function App() {
   return (
     <Router>
-      <Switch>
+      <Routes>
         {/* Public Pages */}
-        <Route exact path="/" component={HomePage} />
-        <Route exact path="/login" component={Login} />
-        <Route exact path="/register" component={Register} />
+        <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
 
         {/* Customer Dashboard */}
-        <Route exact path="/customer-dashboard" component={CustomerDashboard} />
-        <Route exact path="/customer-home" component={CustomerHome} />
-        <Route exact path="/customer-profile" component={CustomerProfile} />
-        <Route exact path="/customer-bookings" component={CustomerBookings} />
-        <Route exact path="/customer-messages" component={CustomerMessages} />
-      </Switch>
+        <Route path="/customer-dashboard" element={<CustomerDashboard />} />
+        <Route path="/customer-home" element={<CustomerHome />} />
+        <Route path="/customer-profile" element={<CustomerProfile />} />
+        <Route path="/customer-bookings" element={<CustomerBookings />} />
+        <Route path="/customer-messages" element={<CustomerMessages />} />
+      </Routes>
     </Router>
   );
 }
