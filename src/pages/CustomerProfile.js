@@ -3,9 +3,9 @@ import DashboardLayout from "../components/DashboardLayout";
 
 function CustomerProfile() {
   return (
-    <DashboardLayout role="customer">
+    <DashboardLayout>
       <h1>Profile</h1>
-      <p>Your personal details and settings will go here.</p>
+      <p>Your personal information and settings will appear here.</p>
     </DashboardLayout>
   );
 }
