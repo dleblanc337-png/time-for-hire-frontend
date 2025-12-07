@@ -2,14 +2,12 @@ import React from "react";
 import DashboardLayout from "../components/DashboardLayout";
 
 function CustomerBookings() {
-    const user = JSON.parse(localStorage.getItem("user"));
-
-    return (
-        <DashboardLayout role="customer">
-            <h1>My Bookings</h1>
-            <p>(Customer bookings feature coming soon)</p>
-        </DashboardLayout>
-    );
+  return (
+    <DashboardLayout>
+      <h1>My Bookings</h1>
+      <p>Your upcoming and past bookings will appear here.</p>
+    </DashboardLayout>
+  );
 }
 
 export default CustomerBookings;
