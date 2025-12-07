@@ -18,19 +18,17 @@ function App() {
     <Router>
       <Header />
 
-      {/* ✅ REMOVED marginTop wrapper completely */}
       <Routes>
-        {/* Public Pages */}
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        {/* Customer Pages */}
+        {/* ✅ WORKING FLAT CUSTOMER ROUTES */}
         <Route path="/customer-dashboard" element={<CustomerDashboard />} />
         <Route path="/customer-home" element={<CustomerHome />} />
-        <Route path="/customer-profile" element={<CustomerProfile />} />
         <Route path="/customer-bookings" element={<CustomerBookings />} />
         <Route path="/customer-messages" element={<CustomerMessages />} />
+        <Route path="/customer-profile" element={<CustomerProfile />} />
       </Routes>
     </Router>
   );
