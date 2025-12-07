@@ -19,11 +19,12 @@ function App() {
       <Header />
 
       <Routes>
+        {/* Public */}
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        {/* ✅ WORKING FLAT CUSTOMER ROUTES */}
+        {/* Customer Pages (FLAT ROUTING - STABLE VERSION) */}
         <Route path="/customer-dashboard" element={<CustomerDashboard />} />
         <Route path="/customer-home" element={<CustomerHome />} />
         <Route path="/customer-bookings" element={<CustomerBookings />} />
