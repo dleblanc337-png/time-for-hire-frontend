@@ -1,33 +1,33 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
 
 function CustomerMessages() {
-  // Core conversation store (threadId -> messages)
+  const location = useLocation();
+
+  // Core thread store by helper name
   const [threads, setThreads] = useState({
-    thread1: [
-      { sender: "helper", text: "Hello, I can help with your request." },
-    ],
-    thread2: [
-      { sender: "helper", text: "Your booking is confirmed." },
-    ],
+    "Sarah M.": [{ sender: "helper", text: "Hello, I can help with your request." }],
+    "Mike R.": [{ sender: "helper", text: "Your booking is confirmed." }],
   });
 
-  // Simple thread labels (can later come from backend)
-  const [threadNames] = useState({
-    thread1: "Conversation 1",
-    thread2: "Conversation 2",
-  });
-
-  const [activeThread, setActiveThread] = useState("thread1");
+  const [activeHelper, setActiveHelper] = useState("Sarah M.");
   const [newMessage, setNewMessage] = useState("");
+
+  // ✅ AUTO-OPEN CORRECT HELPER FROM BOOKINGS
+  useEffect(() => {
+    if (location.state?.selectedHelper) {
+      setActiveHelper(location.state.selectedHelper);
+    }
+  }, [location.state]);
 
   function sendMessage() {
     if (!newMessage.trim()) return;
 
     setThreads((prev) => ({
       ...prev,
-      [activeThread]: [
-        ...prev[activeThread],
+      [activeHelper]: [
+        ...prev[activeHelper],
         { sender: "you", text: newMessage },
       ],
     }));
@@ -40,7 +40,7 @@ function CustomerMessages() {
       <h1>Messages</h1>
 
       <div style={{ display: "flex", marginTop: "20px", maxWidth: "900px" }}>
-        {/* LEFT: THREAD LIST */}
+        {/* LEFT: HELPER LIST */}
         <div
           style={{
             width: "220px",
@@ -48,27 +48,29 @@ function CustomerMessages() {
             paddingRight: "10px",
           }}
         >
-          {Object.keys(threads).map((threadId) => (
+          {Object.keys(threads).map((helper) => (
             <div
-              key={threadId}
-              onClick={() => setActiveThread(threadId)}
+              key={helper}
+              onClick={() => setActiveHelper(helper)}
               style={{
                 padding: "10px",
                 cursor: "pointer",
                 background:
-                  activeThread === threadId ? "#003f63" : "transparent",
-                color: activeThread === threadId ? "white" : "black",
+                  activeHelper === helper ? "#003f63" : "transparent",
+                color: activeHelper === helper ? "white" : "black",
                 borderRadius: "5px",
                 marginBottom: "5px",
               }}
             >
-              {threadNames[threadId]}
+              {helper}
             </div>
           ))}
         </div>
 
-        {/* RIGHT: ACTIVE THREAD */}
+        {/* RIGHT: ACTIVE CHAT */}
         <div style={{ flex: 1, paddingLeft: "20px" }}>
+          <h3>Conversation with {activeHelper}</h3>
+
           <div
             style={{
               border: "1px solid #ccc",
@@ -77,7 +79,7 @@ function CustomerMessages() {
               marginBottom: "10px",
             }}
           >
-            {threads[activeThread].map((msg, index) => (
+            {threads[activeHelper].map((msg, index) => (
               <p key={index}>
                 <strong>{msg.sender === "you" ? "You" : "Helper"}:</strong>{" "}
                 {msg.text}

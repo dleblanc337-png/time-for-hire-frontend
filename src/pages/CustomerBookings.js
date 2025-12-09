@@ -1,8 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
 
 function CustomerBookings() {
-  const [bookings, setBookings] = React.useState([
+  const navigate = useNavigate();
+
+  const [bookings] = useState([
     {
       id: 1,
       service: "House Cleaning",
@@ -19,13 +22,11 @@ function CustomerBookings() {
     },
   ]);
 
-  const cancelBooking = (id) => {
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === id ? { ...b, status: "Cancelled" } : b
-      )
-    );
-  };
+  function openMessage(helperName) {
+    navigate("/customer-messages", {
+      state: { selectedHelper: helperName },
+    });
+  }
 
   return (
     <DashboardLayout>
@@ -47,38 +48,22 @@ function CustomerBookings() {
           <h3>{booking.service}</h3>
           <p><strong>Date:</strong> {booking.date}</p>
           <p><strong>Helper:</strong> {booking.helper}</p>
+          <p><strong>Status:</strong> {booking.status}</p>
 
-          <p>
-            <strong>Status: </strong>
-            <span
-              style={{
-                color:
-                  booking.status === "Pending"
-                    ? "orange"
-                    : booking.status === "Completed"
-                    ? "green"
-                    : "red",
-              }}
-            >
-              {booking.status}
-            </span>
-          </p>
-
-          {booking.status === "Pending" && (
-            <button
-              style={{
-                padding: "6px 14px",
-                background: "#b30000",
-                color: "white",
-                border: "none",
-                borderRadius: "5px",
-                cursor: "pointer",
-              }}
-              onClick={() => cancelBooking(booking.id)}
-            >
-              Cancel Booking
-            </button>
-          )}
+          <button
+            onClick={() => openMessage(booking.helper)}
+            style={{
+              marginTop: "10px",
+              padding: "8px 14px",
+              background: "#003f63",
+              color: "white",
+              border: "none",
+              borderRadius: "5px",
+              cursor: "pointer",
+            }}
+          >
+            Message Helper
+          </button>
         </div>
       ))}
     </DashboardLayout>
