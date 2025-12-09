@@ -5,7 +5,8 @@ import "./Header.css";
 
 function Header() {
   const navigate = useNavigate();
-
+  const notifyCount = Number(localStorage.getItem("tfh_notify") || 0);
+  
   // Read login state from localStorage
   let isLoggedIn = false;
   let role = null;
@@ -27,6 +28,7 @@ function Header() {
     localStorage.removeItem("user");
     localStorage.removeItem("role");
     localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("tfh_notify"); // ✅ reset notifications
     navigate("/");
     window.location.reload();
   };
@@ -66,6 +68,15 @@ function Header() {
             <Link to="/customer-dashboard" className="tfh-nav-link">
               My Dashboard
             </Link>
+
+            {/* ✅ NEW: Messages link with notification badge */}
+            <Link to="/customer-messages" className="tfh-nav-link">
+              Messages
+              {notifyCount > 0 && (
+                <span style={badgeStyle}>{notifyCount}</span>
+              )}
+            </Link>
+
             <button className="tfh-logout-btn" onClick={handleLogout}>
               Log Out
             </button>
@@ -78,6 +89,15 @@ function Header() {
             <Link to="/helper-dashboard" className="tfh-nav-link">
               Helper Dashboard
             </Link>
+
+            {/* ✅ Helper inbox link */}
+            <Link to="/helper-messages" className="tfh-nav-link">
+              Messages
+              {notifyCount > 0 && (
+                <span style={badgeStyle}>{notifyCount}</span>
+              )}
+            </Link>
+
             <button className="tfh-logout-btn" onClick={handleLogout}>
               Log Out
             </button>
@@ -87,5 +107,15 @@ function Header() {
     </header>
   );
 }
+
+const badgeStyle = {
+  marginLeft: "6px",
+  background: "red",
+  color: "white",
+  padding: "2px 7px",
+  borderRadius: "50%",
+  fontSize: "12px",
+  fontWeight: "bold",
+};
 
 export default Header;
