@@ -12,6 +12,7 @@ import CustomerHome from "./pages/CustomerHome";
 import CustomerProfile from "./pages/CustomerProfile";
 import CustomerBookings from "./pages/CustomerBookings";
 import CustomerMessages from "./pages/CustomerMessages";
+import HelperMessages from "./pages/HelperMessages";
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
         <Route path="/customer-profile" element={<CustomerProfile />} />
         <Route path="/customer-bookings" element={<CustomerBookings />} />
         <Route path="/customer-messages" element={<CustomerMessages />} />
+        <Route path="/helper-messages" element={<HelperMessages />} />
       </Routes>
     </Router>
   );

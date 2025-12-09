@@ -1,20 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
+import { getMessages, saveMessages } from "../utils/messageStore";
 
 function CustomerMessages() {
   const location = useLocation();
-
-  // Core thread store by helper name
-  const [threads, setThreads] = useState({
-    "Sarah M.": [{ sender: "helper", text: "Hello, I can help with your request." }],
-    "Mike R.": [{ sender: "helper", text: "Your booking is confirmed." }],
-  });
-
-  const [activeHelper, setActiveHelper] = useState("Sarah M.");
+  const [threads, setThreads] = useState(getMessages());
+  const [activeHelper, setActiveHelper] = useState(Object.keys(threads)[0]);
   const [newMessage, setNewMessage] = useState("");
 
-  // ✅ AUTO-OPEN CORRECT HELPER FROM BOOKINGS
   useEffect(() => {
     if (location.state?.selectedHelper) {
       setActiveHelper(location.state.selectedHelper);
@@ -24,30 +18,35 @@ function CustomerMessages() {
   function sendMessage() {
     if (!newMessage.trim()) return;
 
-    setThreads((prev) => ({
-      ...prev,
+    const updated = {
+      ...threads,
       [activeHelper]: [
-        ...prev[activeHelper],
+        ...threads[activeHelper],
         { sender: "you", text: newMessage },
       ],
-    }));
+    };
+
+    setThreads(updated);
+    saveMessages(updated);
+
+    // ✅ increment notification counter
+    const current = Number(localStorage.getItem("tfh_notify") || 0);
+    localStorage.setItem("tfh_notify", current + 1);
 
     setNewMessage("");
   }
+
+  // ✅ reset notification when opening messages
+  useEffect(() => {
+    localStorage.setItem("tfh_notify", 0);
+  }, []);
 
   return (
     <DashboardLayout>
       <h1>Messages</h1>
 
       <div style={{ display: "flex", marginTop: "20px", maxWidth: "900px" }}>
-        {/* LEFT: HELPER LIST */}
-        <div
-          style={{
-            width: "220px",
-            borderRight: "1px solid #ccc",
-            paddingRight: "10px",
-          }}
-        >
+        <div style={{ width: "220px", borderRight: "1px solid #ccc" }}>
           {Object.keys(threads).map((helper) => (
             <div
               key={helper}
@@ -55,8 +54,7 @@ function CustomerMessages() {
               style={{
                 padding: "10px",
                 cursor: "pointer",
-                background:
-                  activeHelper === helper ? "#003f63" : "transparent",
+                background: activeHelper === helper ? "#003f63" : "transparent",
                 color: activeHelper === helper ? "white" : "black",
                 borderRadius: "5px",
                 marginBottom: "5px",
@@ -67,7 +65,6 @@ function CustomerMessages() {
           ))}
         </div>
 
-        {/* RIGHT: ACTIVE CHAT */}
         <div style={{ flex: 1, paddingLeft: "20px" }}>
           <h3>Conversation with {activeHelper}</h3>
 
@@ -87,32 +84,14 @@ function CustomerMessages() {
             ))}
           </div>
 
-          {/* INPUT */}
           <div style={{ display: "flex" }}>
             <input
-              type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="Type your message..."
-              style={{
-                flex: 1,
-                padding: "8px",
-                border: "1px solid #ccc",
-              }}
+              style={{ flex: 1, padding: "8px" }}
             />
-
-            <button
-              onClick={sendMessage}
-              style={{
-                marginLeft: "10px",
-                padding: "8px 16px",
-                background: "#003f63",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-              }}
-            >
+            <button onClick={sendMessage} style={sendBtn}>
               Send
             </button>
           </div>
@@ -121,5 +100,14 @@ function CustomerMessages() {
     </DashboardLayout>
   );
 }
+
+const sendBtn = {
+  marginLeft: "10px",
+  padding: "8px 16px",
+  background: "#003f63",
+  color: "white",
+  border: "none",
+  borderRadius: "4px",
+};
 
 export default CustomerMessages;
