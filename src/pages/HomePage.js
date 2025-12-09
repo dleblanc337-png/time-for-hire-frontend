@@ -232,7 +232,7 @@ const HomePage = () => {
             <button className="tfh-tab tfh-tab-active">I am looking for</button>
             <button
               className="tfh-tab tfh-tab-inactive"
-              onClick={() => navigate("/helper/login")}
+              onClick={() => navigate("login")}
             >
               I am offering
             </button>
