@@ -11,9 +11,9 @@ function DashboardLayout({ children }) {
 
         {/* ✅ FIXED: Home now goes to MAIN calendar homepage */}
         <Link to="/" style={linkStyle}>Home</Link>
-
-        <Link to="/customer-dashboard/bookings" style={linkStyle}>My Bookings</Link>
-        <Link to="/customer-dashboard/messages" style={linkStyle}>Messages</Link>
+        <Link to="/customer-home">Home</Link>
+        <Link to="/customer-bookings" style={linkStyle}>My Bookings</Link>
+        <Link to="/customer-messages" style={linkStyle}>Messages</Link>
         <Link to="/customer-profile" style={linkStyle}>Profile</Link>
       </div>
 
