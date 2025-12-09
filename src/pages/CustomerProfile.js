@@ -1,91 +1,96 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 
 function CustomerProfile() {
-  const [profile, setProfile] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    address: "",
+  const [form, setForm] = useState({
+    name: "Customer Test",
+    email: "customertest@yourdomain.ca",
+    phone: "1234567891",
+    address: "123 Rue ABCD",
   });
 
-  useEffect(() => {
-    const storedProfile = localStorage.getItem("customerProfile");
-    if (storedProfile) {
-      setProfile(JSON.parse(storedProfile));
-    }
-  }, []);
+  const [saved, setSaved] = useState(false);
 
-  function handleChange(e) {
-    setProfile({ ...profile, [e.target.name]: e.target.value });
-  }
+  const updateForm = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
 
-  function handleSave() {
-    localStorage.setItem("customerProfile", JSON.stringify(profile));
-    alert("Profile saved locally ✅");
-  }
+  const saveProfile = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
 
   return (
     <DashboardLayout>
       <h1>My Profile</h1>
       <p>Update your personal information below.</p>
 
-      <div style={{ maxWidth: "400px", marginTop: "20px" }}>
+      {/* Success Toast */}
+      {saved && (
+        <div
+          style={{
+            background: "#4BB543",
+            color: "white",
+            padding: "10px",
+            borderRadius: "5px",
+            marginBottom: "15px",
+            maxWidth: "300px",
+          }}
+        >
+          ✅ Profile updated successfully
+        </div>
+      )}
+
+      <div style={{ maxWidth: "400px" }}>
         <label>Name</label>
         <input
           name="name"
-          value={profile.name}
-          onChange={handleChange}
-          style={inputStyle}
+          value={form.name}
+          onChange={updateForm}
+          className="input"
         />
 
         <label>Email</label>
         <input
           name="email"
-          value={profile.email}
-          onChange={handleChange}
-          style={inputStyle}
+          value={form.email}
+          onChange={updateForm}
+          className="input"
         />
 
         <label>Phone</label>
         <input
           name="phone"
-          value={profile.phone}
-          onChange={handleChange}
-          style={inputStyle}
+          value={form.phone}
+          onChange={updateForm}
+          className="input"
         />
 
         <label>Address</label>
         <input
           name="address"
-          value={profile.address}
-          onChange={handleChange}
-          style={inputStyle}
+          value={form.address}
+          onChange={updateForm}
+          className="input"
         />
 
-        <button onClick={handleSave} style={buttonStyle}>
+        <button
+          onClick={saveProfile}
+          style={{
+            marginTop: "10px",
+            padding: "8px 16px",
+            background: "#003f63",
+            color: "white",
+            border: "none",
+            borderRadius: "5px",
+            cursor: "pointer",
+          }}
+        >
           Save Profile
         </button>
       </div>
     </DashboardLayout>
   );
 }
-
-const inputStyle = {
-  width: "100%",
-  padding: "8px",
-  marginBottom: "12px",
-  borderRadius: "6px",
-  border: "1px solid #ccc",
-};
-
-const buttonStyle = {
-  padding: "10px 16px",
-  background: "#0a3c6e",
-  color: "white",
-  border: "none",
-  borderRadius: "6px",
-  cursor: "pointer",
-};
 
 export default CustomerProfile;
