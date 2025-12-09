@@ -2,16 +2,28 @@ import React from "react";
 import { Link } from "react-router-dom";
 
 function DashboardLayout({ children }) {
+  const linkStyle = {
+    display: "block",
+    padding: "12px 20px",
+    color: "white",
+    textDecoration: "none",
+    fontWeight: "500",
+  };
+
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
-      
       {/* SIDEBAR */}
-      <div style={{ width: "220px", background: "#0A3A66", color: "white", padding: "20px" }}>
-        <h2>Dashboard</h2>
+      <div
+        style={{
+          width: "220px",
+          background: "#003f63",
+          paddingTop: "30px",
+        }}
+      >
+        <h2 style={{ color: "white", paddingLeft: "20px" }}>Dashboard</h2>
 
-        {/* ✅ FIXED: Home now goes to MAIN calendar homepage */}
+        {/* ✅ SINGLE HOME LINK ONLY */}
         <Link to="/" style={linkStyle}>Home</Link>
-        <Link to="/customer-home">Home</Link>
         <Link to="/customer-bookings" style={linkStyle}>My Bookings</Link>
         <Link to="/customer-messages" style={linkStyle}>Messages</Link>
         <Link to="/customer-profile" style={linkStyle}>Profile</Link>
@@ -24,13 +36,5 @@ function DashboardLayout({ children }) {
     </div>
   );
 }
-
-const linkStyle = {
-  display: "block",
-  color: "white",
-  textDecoration: "none",
-  marginBottom: "15px",
-  fontSize: "16px",
-};
 
 export default DashboardLayout;
