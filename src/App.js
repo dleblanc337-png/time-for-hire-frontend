@@ -14,6 +14,11 @@ import CustomerBookings from "./pages/CustomerBookings";
 import CustomerMessages from "./pages/CustomerMessages";
 import HelperMessages from "./pages/HelperMessages";
 
+// ✅ PAYMENTS
+import Payment from "./pages/Payment";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentCancel from "./pages/PaymentCancel";
+
 function App() {
   return (
     <Router>
@@ -31,7 +36,14 @@ function App() {
         <Route path="/customer-profile" element={<CustomerProfile />} />
         <Route path="/customer-bookings" element={<CustomerBookings />} />
         <Route path="/customer-messages" element={<CustomerMessages />} />
+
+        {/* Helper */}
         <Route path="/helper-messages" element={<HelperMessages />} />
+
+        {/* ✅ PAYMENTS ROUTES */}
+        <Route path="/payment" element={<Payment />} />
+        <Route path="/payment-success" element={<PaymentSuccess />} />
+        <Route path="/payment-cancel" element={<PaymentCancel />} />
       </Routes>
     </Router>
   );
