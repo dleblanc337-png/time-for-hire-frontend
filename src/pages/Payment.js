@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { loadStripe } from "@stripe/stripe-js";
 import {
   Elements,
@@ -12,24 +13,33 @@ const stripePromise = loadStripe(
 );
 
 // -------------------------
-// PAYMENT FORM COMPONENT
+// CHECKOUT FORM
 // -------------------------
 function CheckoutForm() {
   const stripe = useStripe();
   const elements = useElements();
-  const [amount, setAmount] = useState("");
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // If coming from "Pay Now", prefer booking amount
+  const prefilledAmount = location.state?.amount || "";
+
+  const [amount, setAmount] = useState(prefilledAmount);
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
-  const handlePayment = async (e) => {
+  async function handlePayment(e) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
     try {
+      const backendUrl =
+        process.env.REACT_APP_API_URL ||
+        "https://time-for-hire-backend.onrender.com";
+
       const res = await fetch(
-        "https://time-for-hire-backend.onrender.com/api/payments/create-payment-intent",
+        `${backendUrl}/api/payments/create-payment-intent`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -38,6 +48,11 @@ function CheckoutForm() {
           })
         }
       );
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Backend error");
+      }
 
       const data = await res.json();
 
@@ -52,62 +67,85 @@ function CheckoutForm() {
 
       if (result.error) {
         setError(result.error.message);
-      } else {
-        if (result.paymentIntent.status === "succeeded") {
-          setSuccess(true);
-        }
+      } else if (result.paymentIntent.status === "succeeded") {
+        navigate("/payment-success");
       }
     } catch (err) {
-      setError("Payment failed");
+      console.error("Payment error:", err);
+      setError(err.message || "Payment failed");
     }
 
     setLoading(false);
-  };
-
-  if (success) {
-    return (
-      <div style={{ padding: 30 }}>
-        ✅ Payment Successful!
-      </div>
-    );
   }
 
   return (
-    <form onSubmit={handlePayment} style={{ padding: 30 }}>
-      <h2>Test Payment</h2>
+    <div
+      style={{
+        maxWidth: "420px",
+        marginLeft: "60px",
+        marginTop: "40px",
+        background: "#fff",
+        padding: "24px",
+        borderRadius: "10px",
+        border: "1px solid #ddd"
+      }}
+    >
+      <h2 style={{ marginBottom: "14px" }}>Test Payment</h2>
 
-      <input
-        type="number"
-        placeholder="Amount (CAD)"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        required
-      />
+      <form onSubmit={handlePayment}>
+        <label>Amount (CAD)</label>
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          required
+          style={{
+            width: "100%",
+            padding: "8px",
+            marginTop: "6px",
+            marginBottom: "14px"
+          }}
+        />
 
-      <div style={{ marginTop: 20 }}>
-        <CardElement
-  options={{
-    style: {
-      base: {
-        fontSize: "18px",
-        color: "#000",
-        "::placeholder": { color: "#555" }
-      },
-      invalid: { color: "red" }
-    },
-    hidePostalCode: false
-  }}
-/>
-      </div>
+        <label>Card Details</label>
+        <div style={{ marginTop: "8px", marginBottom: "14px" }}>
+          <CardElement
+            options={{
+              style: {
+                base: {
+                  fontSize: "16px",
+                  color: "#000",
+                  "::placeholder": { color: "#555" }
+                },
+                invalid: { color: "red" }
+              },
+              hidePostalCode: false
+            }}
+          />
+        </div>
 
-      {error && (
-        <p style={{ color: "red" }}>{error}</p>
-      )}
+        {error && (
+          <p style={{ color: "red", marginBottom: "12px" }}>
+            {error}
+          </p>
+        )}
 
-      <button disabled={loading} style={{ marginTop: 20 }}>
-        {loading ? "Processing..." : "Pay Now"}
-      </button>
-    </form>
+        <button
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "10px",
+            background: "#28a745",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer"
+          }}
+        >
+          {loading ? "Processing..." : "Pay Now"}
+        </button>
+      </form>
+    </div>
   );
 }
 
