@@ -85,7 +85,19 @@ function CheckoutForm() {
       />
 
       <div style={{ marginTop: 20 }}>
-        <CardElement />
+        <CardElement
+  options={{
+    style: {
+      base: {
+        fontSize: "18px",
+        color: "#000",
+        "::placeholder": { color: "#555" }
+      },
+      invalid: { color: "red" }
+    },
+    hidePostalCode: false
+  }}
+/>
       </div>
 
       {error && (
