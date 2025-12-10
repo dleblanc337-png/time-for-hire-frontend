@@ -5,13 +5,14 @@ import DashboardLayout from "../components/DashboardLayout";
 function CustomerBookings() {
   const navigate = useNavigate();
 
-  const [bookings] = useState([
+  const [bookings, setBookings] = useState([
     {
       id: 1,
       service: "House Cleaning",
       date: "2025-12-10",
       helper: "Sarah M.",
       status: "Pending",
+      amount: 120,
     },
     {
       id: 2,
@@ -19,6 +20,7 @@ function CustomerBookings() {
       date: "2025-12-08",
       helper: "Mike R.",
       status: "Completed",
+      amount: 85,
     },
   ]);
 
@@ -26,6 +28,22 @@ function CustomerBookings() {
     navigate("/customer-messages", {
       state: { selectedHelper: helperName },
     });
+  }
+
+  function handlePayment(booking) {
+    navigate("/payment", {
+      state: {
+        bookingId: booking.id,
+        amount: booking.amount,
+        service: booking.service,
+      },
+    });
+  }
+
+  function statusColor(status) {
+    if (status === "Paid") return "green";
+    if (status === "Completed") return "blue";
+    return "orange";
   }
 
   return (
@@ -48,22 +66,47 @@ function CustomerBookings() {
           <h3>{booking.service}</h3>
           <p><strong>Date:</strong> {booking.date}</p>
           <p><strong>Helper:</strong> {booking.helper}</p>
-          <p><strong>Status:</strong> {booking.status}</p>
 
-          <button
-            onClick={() => openMessage(booking.helper)}
-            style={{
-              marginTop: "10px",
-              padding: "8px 14px",
-              background: "#003f63",
-              color: "white",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-            }}
-          >
-            Message Helper
-          </button>
+          <p>
+            <strong>Status:</strong>{" "}
+            <span style={{ color: statusColor(booking.status) }}>
+              {booking.status}
+            </span>
+          </p>
+
+          <p><strong>Amount:</strong> ${booking.amount}</p>
+
+          <div style={{ marginTop: "12px", display: "flex", gap: "10px" }}>
+            <button
+              onClick={() => openMessage(booking.helper)}
+              style={{
+                padding: "8px 14px",
+                background: "#003f63",
+                color: "white",
+                border: "none",
+                borderRadius: "5px",
+                cursor: "pointer",
+              }}
+            >
+              Message Helper
+            </button>
+
+            {booking.status !== "Paid" && (
+              <button
+                onClick={() => handlePayment(booking)}
+                style={{
+                  padding: "8px 14px",
+                  background: "#28a745",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "5px",
+                  cursor: "pointer",
+                }}
+              >
+                Pay Now
+              </button>
+            )}
+          </div>
         </div>
       ))}
     </DashboardLayout>
