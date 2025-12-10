@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
 
@@ -23,6 +23,27 @@ function CustomerBookings() {
       amount: 85,
     },
   ]);
+
+  // ✅ On load, apply "Paid" status based on localStorage
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(
+        localStorage.getItem("paidBookings") || "[]"
+      );
+
+      if (stored.length > 0) {
+        setBookings((prev) =>
+          prev.map((b) =>
+            stored.includes(b.id)
+              ? { ...b, status: "Paid" }
+              : b
+          )
+        );
+      }
+    } catch (e) {
+      console.error("Error reading paid bookings from localStorage", e);
+    }
+  }, []);
 
   function openMessage(helperName) {
     navigate("/customer-messages", {
@@ -91,6 +112,7 @@ function CustomerBookings() {
               Message Helper
             </button>
 
+            {/* Hide Pay Now when already paid */}
             {booking.status !== "Paid" && (
               <button
                 onClick={() => handlePayment(booking)}

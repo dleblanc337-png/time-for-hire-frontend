@@ -21,10 +21,11 @@ function CheckoutForm() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // If coming from "Pay Now", prefer booking amount
-  const prefilledAmount = location.state?.amount || "";
+  // Data coming from CustomerBookings "Pay Now"
+  const bookingId = location.state?.bookingId || null;
+  const bookingAmount = location.state?.amount || "";
 
-  const [amount, setAmount] = useState(prefilledAmount);
+  const [amount, setAmount] = useState(bookingAmount);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -68,7 +69,13 @@ function CheckoutForm() {
       if (result.error) {
         setError(result.error.message);
       } else if (result.paymentIntent.status === "succeeded") {
-        navigate("/payment-success");
+        // ✅ Pass booking info to the success page
+        navigate("/payment-success", {
+          state: {
+            bookingId,
+            amount
+          }
+        });
       }
     } catch (err) {
       console.error("Payment error:", err);

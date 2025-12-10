@@ -1,34 +1,69 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
-const PaymentSuccess = () => {
+function PaymentSuccess() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const bookingId = location.state?.bookingId;
+  const amount = location.state?.amount;
+
+  // ✅ On success, remember this booking as "Paid" in localStorage
+  useEffect(() => {
+    if (!bookingId) return;
+
+    try {
+      const stored = JSON.parse(
+        localStorage.getItem("paidBookings") || "[]"
+      );
+
+      if (!stored.includes(bookingId)) {
+        stored.push(bookingId);
+        localStorage.setItem(
+          "paidBookings",
+          JSON.stringify(stored)
+        );
+      }
+    } catch (e) {
+      console.error("Error saving paid booking to localStorage", e);
+    }
+  }, [bookingId]);
+
   return (
-    <div style={styles.container}>
-      <h2>🎉 Payment Successful!</h2>
-      <p>Your booking has now been marked as <strong>Paid</strong>.</p>
+    <div style={{ textAlign: "center", marginTop: "80px" }}>
+      <h1>🎉 Payment Successful!</h1>
+      <p>
+        {amount ? (
+          <>
+            Your payment of <strong>${amount}</strong> has been
+            processed and the booking is now marked as{" "}
+            <strong>Paid</strong>.
+          </>
+        ) : (
+          <>
+            Your booking has now been marked as{" "}
+            <strong>Paid</strong>.
+          </>
+        )}
+      </p>
 
-      <Link to="/dashboard" style={styles.button}>
+      <button
+        onClick={() => navigate("/customer-dashboard")}
+        style={{
+          marginTop: "24px",
+          padding: "10px 20px",
+          background: "#0056d6",
+          color: "#fff",
+          border: "none",
+          borderRadius: "6px",
+          cursor: "pointer",
+          fontSize: "16px"
+        }}
+      >
         Go to My Dashboard
-      </Link>
+      </button>
     </div>
   );
-};
+}
 
 export default PaymentSuccess;
-
-const styles = {
-  container: {
-    padding: "40px",
-    textAlign: "center",
-  },
-  button: {
-    display: "inline-block",
-    marginTop: "20px",
-    padding: "12px 24px",
-    background: "#0066cc",
-    color: "white",
-    borderRadius: "8px",
-    textDecoration: "none",
-    fontWeight: "bold",
-  },
-};
