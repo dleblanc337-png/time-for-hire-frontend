@@ -15,6 +15,13 @@ export function getLedgerEntry(bookingId) {
   return ledger.find((e) => e.bookingId === bookingId);
 }
 
+// Add new ledger entry (used after successful payment)
+export function addLedgerEntry(entry) {
+  const ledger = getLedger();
+  ledger.push(entry);
+  saveLedger(ledger);
+}
+
 // Update a single ledger entry (used by AdminLedger actions)
 export function updateLocalLedgerEntry(bookingId, updates) {
   const ledger = getLedger();
