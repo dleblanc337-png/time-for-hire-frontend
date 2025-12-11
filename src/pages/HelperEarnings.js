@@ -1,98 +1,163 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
-import { useSearchParams } from "react-router-dom";
+import React, { useState, useMemo } from "react";
+import DashboardLayout from "../components/DashboardLayout";
+import { getLedger } from "../utils/ledger";
 
-export default function HelperEarnings() {
-  // For now, helperId is passed in URL as ?id=HELPER_ID
-  const [searchParams] = useSearchParams();
-  const helperId = searchParams.get("id");
+function HelperEarnings() {
+  const [expandedBookingId, setExpandedBookingId] = useState(null);
+  const ledger = getLedger();
 
-  const [bookings, setBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const currentYear = new Date().getFullYear();
 
-  useEffect(() => {
-    if (!helperId) return;
+  const {
+    totalEarnedThisYear,
+    totalPendingThisYear,
+    totalCompletedThisYear,
+    totalCharityThisYear,
+    sortedEntries
+  } = useMemo(() => {
+    let earned = 0;
+    let pending = 0;
+    let completed = 0;
+    let charity = 0;
 
-    const load = async () => {
-      try {
-        const res = await axios.get(`/api/bookings/helper/${helperId}`);
-        setBookings(res.data || []);
-      } catch (err) {
-        console.error(err);
-        alert("Could not load earnings.");
+    const entries = [...ledger].sort((a, b) => {
+      const ta = new Date(a.timestamp || a.completedAt || 0).getTime();
+      const tb = new Date(b.timestamp || b.completedAt || 0).getTime();
+      return tb - ta;
+    });
+
+    entries.forEach((e) => {
+      const year = new Date(e.timestamp || e.completedAt || 0).getFullYear();
+      if (!year || year !== currentYear) return;
+
+      const helper = Number(e.helperReceives || 0);
+      const charityPart = Number(e.charityAmount || 0);
+
+      if (e.status === "Completed") {
+        earned += helper;
+        completed += helper;
+        charity += charityPart;
+      } else if (e.status === "Paid") {
+        pending += helper;
       }
-      setLoading(false);
+    });
+
+    return {
+      totalEarnedThisYear: earned.toFixed(2),
+      totalPendingThisYear: pending.toFixed(2),
+      totalCompletedThisYear: completed.toFixed(2),
+      totalCharityThisYear: charity.toFixed(2),
+      sortedEntries: entries
     };
+  }, [ledger, currentYear]);
 
-    load();
-  }, [helperId]);
-
-  if (!helperId) {
-    return (
-      <div style={{ padding: 20 }}>
-        <h1>Helper Earnings</h1>
-        <p>No helper selected. Open this page using:</p>
-        <code>/helper/earnings?id=HELPER_ID</code>
-      </div>
-    );
+  function toggleExpand(id) {
+    setExpandedBookingId((prev) => (prev === id ? null : id));
   }
 
-  if (loading) return <p style={{ padding: 20 }}>Loading earnings...</p>;
-
-  // Calculate total earnings
-  const total = bookings.reduce((sum, b) => sum + (b.helperPrice || 0), 0);
-
   return (
-    <div style={{ padding: "20px" }}>
-      <h1>My Earnings</h1>
-      <h2 style={{ marginTop: 5, color: "green" }}>
-        Total Earned: ${total}
-      </h2>
+    <DashboardLayout>
+      <h1>Helper Earnings</h1>
+      <p>Overview of what you’ve earned and are expected to earn.</p>
 
-      {bookings.length === 0 && (
-        <p style={{ marginTop: 20 }}>No bookings yet.</p>
+      {/* Summary block */}
+      <div
+        style={{
+          marginTop: "20px",
+          marginBottom: "20px",
+          padding: "16px",
+          background: "#f5f5f5",
+          borderRadius: "8px",
+          maxWidth: "600px",
+        }}
+      >
+        <p><strong>Total Earned This Year:</strong> ${totalEarnedThisYear}</p>
+        <p><strong>Pending Earnings:</strong> ${totalPendingThisYear}</p>
+        <p><strong>Completed Earnings:</strong> ${totalCompletedThisYear}</p>
+        <p><strong>Charity Contributed:</strong> ${totalCharityThisYear}</p>
+      </div>
+
+      {/* Ledger list */}
+      {sortedEntries.length === 0 && (
+        <p>No paid jobs recorded yet.</p>
       )}
 
-      {bookings.length > 0 && (
-        <table
-          style={{
-            borderCollapse: "collapse",
-            width: "100%",
-            marginTop: 20,
-            maxWidth: 800,
-          }}
-        >
-          <thead>
-            <tr style={{ background: "#f0f0f0" }}>
-              <th style={thStyle}>Date</th>
-              <th style={thStyle}>Time</th>
-              <th style={thStyle}>Service</th>
-              <th style={thStyle}>Earnings</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bookings.map((b) => (
-              <tr key={b._id}>
-                <td style={tdStyle}>{b.date}</td>
-                <td style={tdStyle}>{b.time}</td>
-                <td style={tdStyle}>{b.service}</td>
-                <td style={tdStyle}>${b.helperPrice}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
+      {sortedEntries.map((e) => {
+        const date = e.completedAt || e.timestamp;
+        const displayDate = date
+          ? new Date(date).toLocaleString()
+          : "N/A";
+
+        const statusColor =
+          e.status === "Completed" ? "green" : e.status === "Paid" ? "orange" : "gray";
+
+        const isExpanded = expandedBookingId === e.bookingId;
+
+        return (
+          <div
+            key={e.bookingId}
+            style={{
+              background: "#fff",
+              border: "1px solid #ddd",
+              borderRadius: "8px",
+              padding: "12px 16px",
+              marginBottom: "12px",
+              maxWidth: "700px",
+              cursor: "pointer",
+            }}
+            onClick={() => toggleExpand(e.bookingId)}
+          >
+            {/* Row header */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <strong>Job #{e.bookingId}</strong>{" "}
+                <span style={{ color: statusColor }}>({e.status})</span>
+                <div style={{ fontSize: "12px", color: "#555" }}>
+                  {displayDate}
+                </div>
+              </div>
+
+              <div>
+                {e.status === "Completed" ? (
+                  <span><strong>Earned:</strong> ${e.helperReceives}</span>
+                ) : (
+                  <span><strong>Will Earn:</strong> ${e.helperReceives}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Dropdown details */}
+            {isExpanded && (
+              <div
+                style={{
+                  marginTop: "12px",
+                  paddingTop: "10px",
+                  borderTop: "1px solid #eee",
+                  fontSize: "14px",
+                }}
+              >
+                <p><strong>Base Amount:</strong> ${e.baseAmount}</p>
+                <p><strong>Customer Paid:</strong> ${e.totalCustomerCharge}</p>
+                <p><strong>Your Earnings:</strong> ${e.helperReceives}</p>
+                <p><strong>Charity Contribution:</strong> ${e.charityAmount}</p>
+                <p><strong>Estimated Stripe Fee:</strong> ${e.stripeFee}</p>
+                <p>
+                  <strong>PaymentIntent ID:</strong>{" "}
+                  {e.paymentIntentId || "Not recorded"}
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </DashboardLayout>
   );
 }
 
-const thStyle = {
-  padding: "10px",
-  border: "1px solid #ccc",
-  textAlign: "left",
-};
-
-const tdStyle = {
-  padding: "10px",
-  border: "1px solid #ccc",
-};
+export default HelperEarnings;

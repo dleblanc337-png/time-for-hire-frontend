@@ -6,7 +6,6 @@ import Header from "./components/Header";
 import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import AdminLedger from "./pages/AdminLedger";
 
 import CustomerDashboard from "./pages/CustomerDashboard";
 import CustomerHome from "./pages/CustomerHome";
@@ -15,10 +14,14 @@ import CustomerBookings from "./pages/CustomerBookings";
 import CustomerMessages from "./pages/CustomerMessages";
 import HelperMessages from "./pages/HelperMessages";
 
-// ✅ PAYMENTS
+// Payments
 import Payment from "./pages/Payment";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
+
+// New pages
+import HelperEarnings from "./pages/HelperEarnings";
+import AdminLedger from "./pages/AdminLedger";
 
 function App() {
   return (
@@ -30,8 +33,7 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/admin-ledger" element={<AdminLedger />} />
-        
+
         {/* Customer Dashboard Hub */}
         <Route path="/customer-dashboard" element={<CustomerDashboard />} />
         <Route path="/customer-home" element={<CustomerHome />} />
@@ -41,11 +43,15 @@ function App() {
 
         {/* Helper */}
         <Route path="/helper-messages" element={<HelperMessages />} />
+        <Route path="/helper-earnings" element={<HelperEarnings />} />
 
-        {/* ✅ PAYMENTS ROUTES */}
+        {/* Payments */}
         <Route path="/payment" element={<Payment />} />
         <Route path="/payment-success" element={<PaymentSuccess />} />
         <Route path="/payment-cancel" element={<PaymentCancel />} />
+
+        {/* Admin */}
+        <Route path="/admin-ledger" element={<AdminLedger />} />
       </Routes>
     </Router>
   );
