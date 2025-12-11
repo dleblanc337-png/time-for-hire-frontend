@@ -6,6 +6,7 @@ import Header from "./components/Header";
 import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import AdminLedger from "./pages/AdminLedger";
 
 import CustomerDashboard from "./pages/CustomerDashboard";
 import CustomerHome from "./pages/CustomerHome";
@@ -29,7 +30,8 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-
+        <Route path="/admin-ledger" element={<AdminLedger />} />
+        
         {/* Customer Dashboard Hub */}
         <Route path="/customer-dashboard" element={<CustomerDashboard />} />
         <Route path="/customer-home" element={<CustomerHome />} />
