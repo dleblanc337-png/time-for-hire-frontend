@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { loadStripe } from "@stripe/stripe-js";
 import {
   Elements,
@@ -8,9 +8,7 @@ import {
   useElements
 } from "@stripe/react-stripe-js";
 
-const stripePromise = loadStripe(
-  process.env.REACT_APP_STRIPE_PUBLIC_KEY
-);
+const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY);
 
 // -------------------------
 // CHECKOUT FORM
@@ -21,11 +19,11 @@ function CheckoutForm() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Data coming from CustomerBookings "Pay Now"
+  // Coming from CustomerBookings.js
   const bookingId = location.state?.bookingId || null;
-  const bookingAmount = location.state?.amount || "";
+  const initialAmount = location.state?.amount || 0;
 
-  const [amount, setAmount] = useState(bookingAmount);
+  const [amount, setAmount] = useState(initialAmount);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -39,13 +37,16 @@ function CheckoutForm() {
         process.env.REACT_APP_API_URL ||
         "https://time-for-hire-backend.onrender.com";
 
+      // ⭐ Send bookingId + baseAmount to backend
       const res = await fetch(
         `${backendUrl}/api/payments/create-payment-intent`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            amount: parseInt(amount) * 100
+            amount: parseInt(amount) * 100,
+            bookingId: bookingId,
+            baseAmount: Number(amount)
           })
         }
       );
@@ -69,7 +70,6 @@ function CheckoutForm() {
       if (result.error) {
         setError(result.error.message);
       } else if (result.paymentIntent.status === "succeeded") {
-        // ✅ Pass booking info to the success page
         navigate("/payment-success", {
           state: {
             bookingId,
@@ -125,16 +125,13 @@ function CheckoutForm() {
                   "::placeholder": { color: "#555" }
                 },
                 invalid: { color: "red" }
-              },
-              hidePostalCode: false
+              }
             }}
           />
         </div>
 
         {error && (
-          <p style={{ color: "red", marginBottom: "12px" }}>
-            {error}
-          </p>
+          <p style={{ color: "red", marginBottom: "12px" }}>{error}</p>
         )}
 
         <button
