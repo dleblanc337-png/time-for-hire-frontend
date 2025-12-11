@@ -1,50 +1,45 @@
 import React, { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { addLedgerEntry } from "../utils/ledger";
 
 function PaymentSuccess() {
   const location = useLocation();
   const navigate = useNavigate();
 
   const bookingId = location.state?.bookingId;
-  const amount = location.state?.amount;
+  const amount = Number(location.state?.amount || 0);
 
-  // ✅ On success, remember this booking as "Paid" in localStorage
   useEffect(() => {
     if (!bookingId) return;
 
+    // Record this job in ledger (escrow simulation)
+    addLedgerEntry({
+      bookingId,
+      baseAmount: amount,
+    });
+
+    // Also flag booking as "Paid" for UI purposes
     try {
       const stored = JSON.parse(
         localStorage.getItem("paidBookings") || "[]"
       );
-
       if (!stored.includes(bookingId)) {
         stored.push(bookingId);
-        localStorage.setItem(
-          "paidBookings",
-          JSON.stringify(stored)
-        );
+        localStorage.setItem("paidBookings", JSON.stringify(stored));
       }
     } catch (e) {
-      console.error("Error saving paid booking to localStorage", e);
+      console.error("Error saving paid booking", e);
     }
-  }, [bookingId]);
+  }, [bookingId, amount]);
 
   return (
     <div style={{ textAlign: "center", marginTop: "80px" }}>
       <h1>🎉 Payment Successful!</h1>
       <p>
-        {amount ? (
-          <>
-            Your payment of <strong>${amount}</strong> has been
-            processed and the booking is now marked as{" "}
-            <strong>Paid</strong>.
-          </>
-        ) : (
-          <>
-            Your booking has now been marked as{" "}
-            <strong>Paid</strong>.
-          </>
-        )}
+        Your booking <strong>#{bookingId}</strong> has been paid.
+      </p>
+      <p>
+        $ {amount} recorded in your job escrow ledger.
       </p>
 
       <button
