@@ -19,8 +19,9 @@ import Payment from "./pages/Payment";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
 
-// New pages
+// Dashboards
 import HelperEarnings from "./pages/HelperEarnings";
+import HelperProfile from "./pages/HelperProfile";
 import AdminLedger from "./pages/AdminLedger";
 
 function App() {
@@ -44,6 +45,7 @@ function App() {
         {/* Helper */}
         <Route path="/helper-messages" element={<HelperMessages />} />
         <Route path="/helper-earnings" element={<HelperEarnings />} />
+        <Route path="/helper-profile" element={<HelperProfile />} />
 
         {/* Payments */}
         <Route path="/payment" element={<Payment />} />

@@ -1,153 +1,267 @@
-import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import DashboardLayout from "../components/DashboardLayout";
 
-const HelperProfile = () => {
-  const { helperId } = useParams();
+function HelperProfile() {
+  const [profile, setProfile] = useState({
+    displayName: "",
+    city: "",
+    photoUrl: "",
+    bio: "",
+    services: "",
+    hourlyRate: "",
+  });
 
-  const [helper, setHelper] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [savedMessage, setSavedMessage] = useState("");
 
-  const [price, setPrice] = useState("");
-  const [savingPrice, setSavingPrice] = useState(false);
-  const [priceMessage, setPriceMessage] = useState("");
-
+  // Load existing profile from localStorage
   useEffect(() => {
-    const fetchHelper = async () => {
-      try {
-        const res = await fetch(
-          `http://localhost:5000/helpers/${helperId}`
-        );
-        const data = await res.json();
-        setHelper(data);
-        setPrice(data.price || "");
-      } catch (err) {
-        console.error("Error fetching helper:", err);
-      }
-      setLoading(false);
-    };
-
-    fetchHelper();
-  }, [helperId]);
-
-  const handleSavePrice = async () => {
-    if (!price) return;
-
     try {
-      setSavingPrice(true);
-
-      const res = await fetch(
-        `http://localhost:5000/helpers/${helperId}/update-price`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ price }),
-        }
-      );
-
-      const data = await res.json();
-
-      setPriceMessage(
-        data.success
-          ? "Price updated successfully!"
-          : "Error updating price."
-      );
-    } catch (err) {
-      console.error(err);
-      setPriceMessage("Server error.");
+      const stored = localStorage.getItem("helperProfile");
+      if (stored) {
+        setProfile(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error("Error loading helperProfile from localStorage", e);
     }
+  }, []);
 
-    setSavingPrice(false);
-    setTimeout(() => setPriceMessage(""), 2500);
-  };
+  function handleChange(e) {
+    const { name, value } = e.target;
+    setProfile((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  }
 
-  if (loading) return <div>Loading...</div>;
-  if (!helper) return <div>Helper not found.</div>;
+  function handleSave(e) {
+    e.preventDefault();
+    try {
+      localStorage.setItem("helperProfile", JSON.stringify(profile));
+      setSavedMessage("Profile saved successfully.");
+      setTimeout(() => setSavedMessage(""), 3000);
+    } catch (e) {
+      console.error("Error saving helperProfile", e);
+      setSavedMessage("Error saving profile.");
+    }
+  }
 
   return (
-    <>
-      {/* MAIN PROFILE */}
-      <div style={styles.container}>
-        <h2>{helper.name}</h2>
+    <DashboardLayout>
+      <h1>Helper Profile</h1>
+      <p>
+        This is how customers will see you when they browse helpers on Time For Hire.
+      </p>
 
-        <p>
-          <strong>Email:</strong> {helper.email}
-        </p>
-
-        <p>
-          <strong>Overall Rating:</strong>{" "}
-          {helper.averageRating || "No reviews yet"}
-        </p>
-
-        <hr />
-
-        <Link to="/helpers" style={styles.backLink}>
-          ← Back to helpers
-        </Link>
-      </div>
-
-      {/* PRICE SECTION — this MUST be inside the fragment wrapper */}
-      <div style={styles.priceBox}>
-        <h3>Set Your Hourly Price</h3>
-
-        <label>Price per hour ($):</label>
-        <input
-          type="number"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          placeholder="Ex: 35"
-          style={styles.input}
-        />
-
-        <button
-          onClick={handleSavePrice}
-          disabled={savingPrice}
-          style={styles.button}
+      <div
+        style={{
+          display: "flex",
+          gap: "30px",
+          marginTop: "20px",
+          flexWrap: "wrap",
+        }}
+      >
+        {/* LEFT: FORM */}
+        <form
+          onSubmit={handleSave}
+          style={{
+            flex: "1 1 320px",
+            maxWidth: "420px",
+            background: "#fff",
+            padding: "20px",
+            borderRadius: "8px",
+            border: "1px solid #ddd",
+          }}
         >
-          {savingPrice ? "Saving..." : "Save Price"}
-        </button>
+          <h3 style={{ marginTop: 0 }}>Edit Profile</h3>
 
-        {priceMessage && <div style={styles.msg}>{priceMessage}</div>}
+          <label style={labelStyle}>Display Name</label>
+          <input
+            type="text"
+            name="displayName"
+            value={profile.displayName}
+            onChange={handleChange}
+            style={inputStyle}
+            placeholder="Example: Test H. - Housekeeping"
+            required
+          />
+
+          <label style={labelStyle}>City / Area</label>
+          <input
+            type="text"
+            name="city"
+            value={profile.city}
+            onChange={handleChange}
+            style={inputStyle}
+            placeholder="Victoria, BC"
+          />
+
+          <label style={labelStyle}>Profile Photo URL</label>
+          <input
+            type="text"
+            name="photoUrl"
+            value={profile.photoUrl}
+            onChange={handleChange}
+            style={inputStyle}
+            placeholder="Paste an image link (optional)"
+          />
+
+          <label style={labelStyle}>Short Bio</label>
+          <textarea
+            name="bio"
+            value={profile.bio}
+            onChange={handleChange}
+            style={{ ...inputStyle, height: "80px", resize: "vertical" }}
+            placeholder="Tell customers who you are, your experience, and what you can help with."
+          />
+
+          <label style={labelStyle}>Services / Keywords</label>
+          <input
+            type="text"
+            name="services"
+            value={profile.services}
+            onChange={handleChange}
+            style={inputStyle}
+            placeholder="cleaning, yard work, moving help, grocery runs"
+          />
+
+          <label style={labelStyle}>Hourly Rate (approx.)</label>
+          <input
+            type="number"
+            name="hourlyRate"
+            value={profile.hourlyRate}
+            onChange={handleChange}
+            style={inputStyle}
+            placeholder="Example: 25"
+            min="0"
+          />
+
+          {savedMessage && (
+            <p style={{ color: "green", marginTop: "10px" }}>{savedMessage}</p>
+          )}
+
+          <button
+            type="submit"
+            style={{
+              marginTop: "16px",
+              padding: "10px 16px",
+              background: "#003f63",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+            }}
+          >
+            Save Profile
+          </button>
+        </form>
+
+        {/* RIGHT: PREVIEW */}
+        <div
+          style={{
+            flex: "1 1 280px",
+            maxWidth: "380px",
+            background: "#fff",
+            padding: "20px",
+            borderRadius: "8px",
+            border: "1px solid #ddd",
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>Preview</h3>
+          <p style={{ fontSize: "13px", color: "#555" }}>
+            This is an example of how your profile might appear to customers.
+          </p>
+
+          <div
+            style={{
+              marginTop: "14px",
+              display: "flex",
+              gap: "16px",
+              alignItems: "flex-start",
+            }}
+          >
+            <div>
+              {profile.photoUrl ? (
+                <img
+                  src={profile.photoUrl}
+                  alt="Helper"
+                  style={{
+                    width: "90px",
+                    height: "90px",
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                    border: "2px solid #003f63",
+                  }}
+                  onError={(e) => {
+                    e.target.style.display = "none";
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: "90px",
+                    height: "90px",
+                    borderRadius: "50%",
+                    background: "#eee",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "36px",
+                    color: "#999",
+                  }}
+                >
+                  ?
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h4 style={{ margin: 0 }}>
+                {profile.displayName || "Your Name Here"}
+              </h4>
+              <p style={{ margin: "4px 0", fontSize: "13px", color: "#555" }}>
+                {profile.city || "City / Area"}
+              </p>
+              {profile.hourlyRate && (
+                <p style={{ margin: "4px 0", fontSize: "13px" }}>
+                  <strong>Approx. ${profile.hourlyRate}/hr</strong>
+                </p>
+              )}
+              <p style={{ fontSize: "13px", marginTop: "8px" }}>
+                {profile.bio ||
+                  "Write a short description about yourself and your experience."}
+              </p>
+              {profile.services && (
+                <p
+                  style={{
+                    marginTop: "6px",
+                    fontSize: "12px",
+                    color: "#003f63",
+                  }}
+                >
+                  <strong>Services:</strong> {profile.services}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
-    </>
+    </DashboardLayout>
   );
+}
+
+const labelStyle = {
+  display: "block",
+  marginTop: "10px",
+  marginBottom: "4px",
+  fontSize: "13px",
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: "8px",
+  borderRadius: "4px",
+  border: "1px solid #ccc",
+  fontSize: "14px",
 };
 
 export default HelperProfile;
-
-const styles = {
-  container: {
-    padding: "20px",
-  },
-  priceBox: {
-    marginTop: "30px",
-    padding: "20px",
-    border: "1px solid #ccc",
-    borderRadius: "10px",
-    width: "300px",
-  },
-  input: {
-    width: "100%",
-    marginTop: "10px",
-    padding: "8px",
-    borderRadius: "6px",
-    border: "1px solid #aaa",
-  },
-  button: {
-    marginTop: "15px",
-    width: "100%",
-    padding: "10px",
-    borderRadius: "6px",
-    border: "none",
-    background: "#0066cc",
-    color: "white",
-    cursor: "pointer",
-  },
-  msg: {
-    marginTop: "10px",
-    fontWeight: "bold",
-  },
-  backLink: {
-    color: "#0066cc",
-    textDecoration: "none",
-  },
-};

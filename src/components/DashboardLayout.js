@@ -32,6 +32,7 @@ function DashboardLayout({ children }) {
 
         <nav>
           <ul style={{ listStyle: "none", padding: 0 }}>
+            {/* Customer side */}
             <li style={{ marginBottom: "10px" }}>
               <Link to="/customer-dashboard" style={linkStyle}>
                 Customer Home
@@ -55,6 +56,7 @@ function DashboardLayout({ children }) {
 
             <hr style={{ borderColor: "#ffffff55", margin: "12px 0" }} />
 
+            {/* Helper side */}
             <li style={{ marginBottom: "10px" }}>
               <Link to="/helper-messages" style={linkStyle}>
                 Helper Jobs
@@ -65,7 +67,13 @@ function DashboardLayout({ children }) {
                 Helper Earnings
               </Link>
             </li>
+            <li style={{ marginBottom: "10px" }}>
+              <Link to="/helper-profile" style={linkStyle}>
+                Helper Profile
+              </Link>
+            </li>
 
+            {/* Admin-only section */}
             {isAdmin && (
               <>
                 <hr style={{ borderColor: "#ffffff55", margin: "12px 0" }} />
