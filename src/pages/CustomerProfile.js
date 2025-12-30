@@ -45,7 +45,7 @@ function CustomerProfile() {
           background: "#fff",
           padding: "20px",
           borderRadius: "8px",
-          border: "1px solid "#ddd",
+          border: "1px solid #ddd",
           marginBottom: "20px",
           maxWidth: "500px",
         }}
