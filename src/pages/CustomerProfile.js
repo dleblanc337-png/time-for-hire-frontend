@@ -1,88 +1,183 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 
 function CustomerProfile() {
-  const [form, setForm] = useState({
-    name: "Customer Test",
-    email: "customertest@yourdomain.ca",
-    phone: "1234567891",
-    address: "123 Rue ABCD",
-  });
+  const [user, setUser] = useState(null);
+  const [helperProfile, setHelperProfile] = useState(null);
 
-  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        setUser(parsed);
 
-  const updateForm = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
+        // If this user is a helper, load helperProfile from localStorage
+        if (parsed.role === "helper") {
+          const hp = localStorage.getItem("helperProfile");
+          if (hp) {
+            setHelperProfile(JSON.parse(hp));
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error reading profile from localStorage", e);
+    }
+  }, []);
 
-  const saveProfile = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
+  if (!user) {
+    return (
+      <DashboardLayout>
+        <h1>My Profile</h1>
+        <p>Not logged in.</p>
+      </DashboardLayout>
+    );
+  }
+
+  const isHelper = user.role === "helper";
 
   return (
     <DashboardLayout>
       <h1>My Profile</h1>
-      <p>Update your personal information below.</p>
 
-      {saved && (
-        <div style={successBox}>
-          ✅ Profile updated successfully
+      {/* BASIC ACCOUNT INFO */}
+      <div
+        style={{
+          background: "#fff",
+          padding: "20px",
+          borderRadius: "8px",
+          border: "1px solid #ddd",
+          marginBottom: "20px",
+          maxWidth: "500px",
+        }}
+      >
+        <h3 style={{ marginTop: 0 }}>Account</h3>
+        <p>
+          <strong>Name:</strong>{" "}
+          {user.name || user.displayName || "Not specified"}
+        </p>
+        <p>
+          <strong>Email:</strong> {user.email}
+        </p>
+        <p>
+          <strong>Role:</strong> {user.role}
+        </p>
+      </div>
+
+      {/* HELPER PROFILE SECTION, IF APPLICABLE */}
+      {isHelper && (
+        <div
+          style={{
+            background: "#fff",
+            padding: "20px",
+            borderRadius: "8px",
+            border: "1px solid #ddd",
+            maxWidth: "700px",
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>Helper Profile (Public View)</h3>
+
+          {!helperProfile && (
+            <p style={{ fontSize: "13px" }}>
+              You have not completed your Helper Profile yet. Go to{" "}
+              <strong>Helper Profile</strong> in the left menu to set it up.
+            </p>
+          )}
+
+          {helperProfile && (
+            <div style={{ display: "flex", gap: "16px" }}>
+              <div>
+                {helperProfile.photoUrl ? (
+                  <img
+                    src={helperProfile.photoUrl}
+                    alt="Helper"
+                    style={{
+                      width: "90px",
+                      height: "90px",
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      border: "2px solid #003f63",
+                    }}
+                    onError={(e) => {
+                      e.target.style.display = "none";
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: "90px",
+                      height: "90px",
+                      borderRadius: "50%",
+                      background: "#eee",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "36px",
+                      color: "#999",
+                    }}
+                  >
+                    ?
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 style={{ margin: 0 }}>
+                  {helperProfile.displayName || "Your Name Here"}
+                </h4>
+                <p
+                  style={{
+                    margin: "4px 0",
+                    fontSize: "13px",
+                    color: "#555",
+                  }}
+                >
+                  {helperProfile.city || "City / Area"}
+                </p>
+
+                {helperProfile.hourlyRate && (
+                  <p style={{ margin: "4px 0", fontSize: "13px" }}>
+                    <strong>Approx. ${helperProfile.hourlyRate}/hr</strong>
+                  </p>
+                )}
+
+                {helperProfile.bio && (
+                  <p style={{ fontSize: "13px", marginTop: "8px" }}>
+                    {helperProfile.bio}
+                  </p>
+                )}
+
+                {helperProfile.services && (
+                  <p
+                    style={{
+                      marginTop: "6px",
+                      fontSize: "12px",
+                      color: "#003f63",
+                    }}
+                  >
+                    <strong>Services:</strong> {helperProfile.services}
+                  </p>
+                )}
+
+                {helperProfile.availability && (
+                  <p
+                    style={{
+                      marginTop: "6px",
+                      fontSize: "12px",
+                      color: "#444",
+                    }}
+                  >
+                    <strong>Availability:</strong>{" "}
+                    {helperProfile.availability}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
-
-      {/* ✅ CLEAN VERTICAL COLUMN */}
-      <div style={columnWrap}>
-        <label>Name</label>
-        <input name="name" value={form.name} onChange={updateForm} style={input} />
-
-        <label>Email</label>
-        <input name="email" value={form.email} onChange={updateForm} style={input} />
-
-        <label>Phone</label>
-        <input name="phone" value={form.phone} onChange={updateForm} style={input} />
-
-        <label>Address</label>
-        <input name="address" value={form.address} onChange={updateForm} style={input} />
-
-        <button onClick={saveProfile} style={saveBtn}>
-          Save Profile
-        </button>
-      </div>
     </DashboardLayout>
   );
 }
-
-const columnWrap = {
-  maxWidth: "380px",
-  display: "flex",
-  flexDirection: "column",
-  gap: "8px",
-};
-
-const input = {
-  padding: "8px",
-  borderRadius: "5px",
-  border: "1px solid #ccc",
-};
-
-const saveBtn = {
-  marginTop: "10px",
-  padding: "10px",
-  background: "#003f63",
-  color: "white",
-  border: "none",
-  borderRadius: "6px",
-  cursor: "pointer",
-};
-
-const successBox = {
-  background: "#4BB543",
-  color: "white",
-  padding: "10px",
-  borderRadius: "5px",
-  marginBottom: "12px",
-  maxWidth: "300px",
-};
 
 export default CustomerProfile;

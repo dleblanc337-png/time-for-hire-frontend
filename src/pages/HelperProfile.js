@@ -9,6 +9,7 @@ function HelperProfile() {
     bio: "",
     services: "",
     hourlyRate: "",
+    availability: "",
   });
 
   const [savedMessage, setSavedMessage] = useState("");
@@ -35,8 +36,21 @@ function HelperProfile() {
 
   function handleSave(e) {
     e.preventDefault();
+
+    // Prepare tags from services string (for future search)
+    const rawServices = profile.services || "";
+    const tags = rawServices
+      .split(",")
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+
+    const toSave = {
+      ...profile,
+      serviceTags: tags, // e.g. ["carpenter","cleaning","yard work"]
+    };
+
     try {
-      localStorage.setItem("helperProfile", JSON.stringify(profile));
+      localStorage.setItem("helperProfile", JSON.stringify(toSave));
       setSavedMessage("Profile saved successfully.");
       setTimeout(() => setSavedMessage(""), 3000);
     } catch (e) {
@@ -121,8 +135,12 @@ function HelperProfile() {
             value={profile.services}
             onChange={handleChange}
             style={inputStyle}
-            placeholder="cleaning, yard work, moving help, grocery runs"
+            placeholder="Example: carpenter, cleaning, yard work, grocery runs"
           />
+          <p style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
+            Separate services with commas. Later, customers searching &quot;carpenter&quot; will
+            match helpers who list &quot;carpenter&quot; here.
+          </p>
 
           <label style={labelStyle}>Hourly Rate (approx.)</label>
           <input
@@ -133,6 +151,15 @@ function HelperProfile() {
             style={inputStyle}
             placeholder="Example: 25"
             min="0"
+          />
+
+          <label style={labelStyle}>Availability / Schedule</label>
+          <textarea
+            name="availability"
+            value={profile.availability}
+            onChange={handleChange}
+            style={{ ...inputStyle, height: "70px", resize: "vertical" }}
+            placeholder="Example: Weeknights after 5PM, weekends, or specific days."
           />
 
           {savedMessage && (
@@ -239,6 +266,17 @@ function HelperProfile() {
                   }}
                 >
                   <strong>Services:</strong> {profile.services}
+                </p>
+              )}
+              {profile.availability && (
+                <p
+                  style={{
+                    marginTop: "6px",
+                    fontSize: "12px",
+                    color: "#444",
+                  }}
+                >
+                  <strong>Availability:</strong> {profile.availability}
                 </p>
               )}
             </div>
