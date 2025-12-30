@@ -1,492 +1,407 @@
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
-import FullCalendar from "@fullcalendar/react";
-import dayGridPlugin from "@fullcalendar/daygrid";
-import interactionPlugin from "@fullcalendar/interaction";
-import { useNavigate } from "react-router-dom";
-import { Link } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import DashboardLayout from "../components/DashboardLayout";
 
-import {
-  SERVICE_CATEGORIES,
-  ALL_SERVICE_SUGGESTIONS,
-} from "../data/serviceCategories";
+// Simple helper to format a Date as YYYY-MM-DD
+function formatDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
-import "../styles/calendarStyles.css";
-
-const isoToday = new Date().toISOString().slice(0, 10);
-const dateToIso = (date) => date.toISOString().slice(0, 10);
-
-const HomePage = () => {
-  const navigate = useNavigate();
-  const calendarRef = useRef(null);
-
-<div style={{ marginBottom: "20px" }}>
-  <Link to="/login" style={{ marginRight: "10px" }}>
-    <button>Login</button>
-  </Link>
-
-  <Link to="/register">
-    <button>Create Account</button>
-  </Link>
-</div>
-
-  // ------------------------
-  // STATE
-  // ------------------------
-  const [helpers, setHelpers] = useState([]);
-  const [results, setResults] = useState([]);
-  const [calendarEvents, setCalendarEvents] = useState([]);
-
+function HomePage() {
+  const [mode, setMode] = useState("looking"); // "looking" or "offering"
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [minPrice, setMinPrice] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
-  const [maxDistance, setMaxDistance] = useState("");
+  const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
+  const [helpers, setHelpers] = useState([]);
 
-  const [dateFilterIso, setDateFilterIso] = useState(isoToday);
-  const [selectedDate, setSelectedDate] = useState(isoToday);
-
-  const [showSuggestions, setShowSuggestions] = useState(false);
-
-  // ------------------------
-  // FETCH HELPERS
-  // ------------------------
-  const fetchHelpers = async () => {
-    try {
-      const res = await fetch("http://localhost:5000/helpers/all");
-      const data = await res.json();
-      setHelpers(data || []);
-      setResults(data || []);
-    } catch (err) {
-      console.error("Helper fetch error:", err);
-    }
-  };
-
-  // ------------------------
-  // FETCH BOOKINGS FOR CALENDAR
-  // ------------------------
-  const fetchCalendarEvents = async () => {
-    try {
-      const res = await fetch("http://localhost:5000/bookings/all");
-      const data = await res.json();
-
-      const events =
-        (data || []).map((b) => ({
-          title: b.service || "Service",
-          date: b.date,
-        })) || [];
-
-      setCalendarEvents(events);
-    } catch (err) {
-      console.error("Calendar fetch error:", err);
-    }
-  };
+  // Calendar month state
+  const [currentMonth, setCurrentMonth] = useState(new Date());
 
   useEffect(() => {
-    fetchHelpers();
-    fetchCalendarEvents();
+    try {
+      const raw = localStorage.getItem("tfh_helpers") || "[]";
+      const parsed = JSON.parse(raw);
+      setHelpers(parsed);
+    } catch (e) {
+      console.error("Error loading tfh_helpers", e);
+    }
   }, []);
 
-  // ------------------------
-  // FILTER HELPERS (left column)
-  // ------------------------
-  useEffect(() => {
-    let filtered = [...helpers];
+  const normalizedTerm = searchTerm.trim().toLowerCase();
 
-    // search term
-    if (searchTerm.trim() !== "") {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter((h) => {
-        const svc = (h.services || "").toLowerCase();
-        const name = (h.name || "").toLowerCase();
-        return svc.includes(term) || name.includes(term);
-      });
-    }
+  function helperMatches(helper) {
+    const profile = helper.profile || {};
+    const tags = profile.serviceTags || [];
+    const slots = helper.availabilitySlots || [];
 
-    // category filter
-    if (selectedCategory) {
-      const cat = SERVICE_CATEGORIES.find((c) => c.name === selectedCategory);
-      if (cat) {
-        const items = cat.items.map((i) => i.toLowerCase());
-        filtered = filtered.filter((h) =>
-          items.some((word) =>
-            (h.services || "").toLowerCase().includes(word)
-          )
-        );
-      }
-    }
+    // Service match (by keyword)
+    const servicesText = (profile.services || "").toLowerCase();
+    const servicesMatch =
+      !normalizedTerm ||
+      tags.includes(normalizedTerm) ||
+      servicesText.includes(normalizedTerm);
 
-    // date availability (simple: helper.availableDays contains ISO)
-    if (dateFilterIso) {
-      filtered = filtered.filter(
-        (h) =>
-          Array.isArray(h.availableDays) &&
-          h.availableDays.includes(dateFilterIso)
+    if (!servicesMatch) return false;
+
+    // If no date selected, don't filter by date
+    if (!selectedDate) return servicesMatch;
+
+    // Require at least one availability slot on that date,
+    // and if a keyword exists, match that keyword in the slot services
+    const slotMatch = slots.some((slot) => {
+      if (slot.date !== selectedDate) return false;
+
+      if (!normalizedTerm) return true;
+
+      const slotServices = slot.services || [];
+      return (
+        slotServices.includes(normalizedTerm) ||
+        (slot.rawServices || "").toLowerCase().includes(normalizedTerm)
       );
-    }
-
-    // price
-    if (minPrice !== "") {
-      filtered = filtered.filter(
-        (h) => Number(h.price || 0) >= Number(minPrice)
-      );
-    }
-    if (maxPrice !== "") {
-      filtered = filtered.filter(
-        (h) => Number(h.price || 0) <= Number(maxPrice)
-      );
-    }
-
-    // distance
-    if (maxDistance !== "") {
-      const dist = Number(maxDistance);
-      filtered = filtered.filter((h) =>
-        typeof h.distanceKm === "number" ? h.distanceKm <= dist : true
-      );
-    }
-
-    setResults(filtered);
-  }, [
-    helpers,
-    searchTerm,
-    selectedCategory,
-    dateFilterIso,
-    minPrice,
-    maxPrice,
-    maxDistance,
-  ]);
-
-  // ------------------------
-  // SUGGESTIONS
-  // ------------------------
-  const filteredSuggestions = useMemo(() => {
-    const term = searchTerm.toLowerCase().trim();
-    if (!term) return [];
-    return ALL_SERVICE_SUGGESTIONS.filter((s) =>
-      s.label.toLowerCase().includes(term)
-    ).slice(0, 12);
-  }, [searchTerm]);
-
-  const groupedSuggestions = useMemo(() => {
-    const out = {};
-    filteredSuggestions.forEach((s) => {
-      if (!out[s.category]) out[s.category] = [];
-      out[s.category].push(s.label);
     });
-    return out;
-  }, [filteredSuggestions]);
 
-  const handleSuggestionClick = (label, category) => {
-    setSearchTerm(label);
-    setSelectedCategory(category);
-    setShowSuggestions(false);
-  };
+    return slotMatch;
+  }
 
-  // ------------------------
-  // CALENDAR HANDLERS
-  // ------------------------
-  const handleDateClick = (info) => {
-    const iso = info.dateStr;
-    setSelectedDate(iso);
-    setDateFilterIso(iso);
-  };
+  const filteredHelpers =
+    mode === "looking" ? helpers.filter(helperMatches) : [];
 
-  const handleTodayClick = () => {
-    const api = calendarRef.current?.getApi();
-    if (api) api.today();
+  // Calendar construction
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth(); // 0-based
+  const firstDayOfMonth = new Date(year, month, 1);
+  const lastDayOfMonth = new Date(year, month + 1, 0);
+  const firstWeekday = firstDayOfMonth.getDay(); // 0 = Sunday
+  const daysInMonth = lastDayOfMonth.getDate();
 
-    setSelectedDate(isoToday);
-    setDateFilterIso(isoToday);
-  };
+  const weeks = [];
+  let currentDay = 1 - firstWeekday; // can start negative
 
-  // Custom classes for today & selected date
-  const dayCellClassNames = (arg) => {
-    const dIso = dateToIso(arg.date);
-    const classes = [];
-    if (dIso === isoToday) classes.push("tfh-day-today");
-    if (dIso === selectedDate) classes.push("tfh-day-selected");
-    return classes;
-  };
+  while (currentDay <= daysInMonth) {
+    const weekDays = [];
+    for (let i = 0; i < 7; i++) {
+      if (currentDay < 1 || currentDay > daysInMonth) {
+        weekDays.push(null);
+      } else {
+        weekDays.push(currentDay);
+      }
+      currentDay++;
+    }
+    weeks.push(weekDays);
+  }
 
-  // ------------------------
-  // BOOK HELPER
-  // ------------------------
-  const handleBookClick = (helper) => {
-    navigate("/book", { state: { helper } });
-  };
+  function changeMonth(delta) {
+    const newMonth = new Date(year, month + delta, 1);
+    setCurrentMonth(newMonth);
+  }
 
-  // ------------------------
-  // RENDER
-  // ------------------------
+  function handleDayClick(day) {
+    if (!day) return;
+    const newDate = new Date(year, month, day);
+    const formatted = formatDate(newDate);
+    setSelectedDate(formatted);
+  }
+
   return (
-    <>
-
-      <div className="tfh-home-container">
+    <DashboardLayout>
+      <div style={{ display: "flex", gap: "24px" }}>
         {/* LEFT FILTER PANEL */}
-        <div className="tfh-left-panel">
-          <div className="tfh-tabs-row">
-            <button className="tfh-tab tfh-tab-active">I am looking for</button>
+        <div
+          style={{
+            width: "260px",
+            background: "#f6f8fb",
+            padding: "20px",
+            borderRadius: "8px",
+            border: "1px solid #e0e4ee",
+          }}
+        >
+          {/* Mode toggle */}
+          <div
+            style={{
+              display: "flex",
+              marginBottom: "16px",
+              borderRadius: "999px",
+              overflow: "hidden",
+              border: "1px solid #ccc",
+            }}
+          >
             <button
-              className="tfh-tab tfh-tab-inactive"
-              onClick={() => navigate("login")}
+              onClick={() => setMode("looking")}
+              style={{
+                flex: 1,
+                padding: "8px",
+                border: "none",
+                cursor: "pointer",
+                background:
+                  mode === "looking" ? "#003f63" : "rgba(0,0,0,0)",
+                color: mode === "looking" ? "#fff" : "#003f63",
+                fontSize: "13px",
+              }}
+            >
+              I am looking for
+            </button>
+            <button
+              onClick={() => setMode("offering")}
+              style={{
+                flex: 1,
+                padding: "8px",
+                border: "none",
+                cursor: "pointer",
+                background:
+                  mode === "offering" ? "#003f63" : "rgba(0,0,0,0)",
+                color: mode === "offering" ? "#fff" : "#003f63",
+                fontSize: "13px",
+              }}
             >
               I am offering
             </button>
           </div>
 
-          <label className="tfh-label">Search</label>
-          <input
-            className="tfh-input"
-            type="text"
-            placeholder="Search a service… (lawn, pets, cleaning)"
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setShowSuggestions(true);
-            }}
-            onFocus={() => setShowSuggestions(true)}
-          />
-
-          {showSuggestions &&
-            filteredSuggestions.length > 0 &&
-            searchTerm.trim() !== "" && (
-              <div className="tfh-suggestions">
-                {Object.entries(groupedSuggestions).map(([cat, labels]) => (
-                  <div key={cat}>
-                    <div className="tfh-suggestions-header">{cat}</div>
-                    {labels.map((label) => (
-                      <div
-                        key={label}
-                        className="tfh-suggestion-item"
-                        onClick={() => handleSuggestionClick(label, cat)}
-                      >
-                        {label}
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-
-          <label className="tfh-label">Category</label>
-          <select
-            className="tfh-input"
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-          >
-            <option value="">All categories</option>
-            {SERVICE_CATEGORIES.map((c) => (
-              <option key={c.name}>{c.name}</option>
-            ))}
-          </select>
-
-          <label className="tfh-label">Price ($/hr)</label>
-          <div className="tfh-price-row">
+          {/* Search */}
+          <div style={{ marginBottom: "12px" }}>
+            <label style={labelStyle}>Search</label>
             <input
-              type="number"
-              placeholder="Min"
-              className="tfh-input"
-              value={minPrice}
-              onChange={(e) => setMinPrice(e.target.value)}
-            />
-            <input
-              type="number"
-              placeholder="Max"
-              className="tfh-input"
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value)}
+              type="text"
+              placeholder="carpenter, lawn, snow..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={inputStyle}
             />
           </div>
 
-          <label className="tfh-label">Distance (km)</label>
-          <input
-            type="number"
-            placeholder="Max distance"
-            className="tfh-input"
-            value={maxDistance}
-            onChange={(e) => setMaxDistance(e.target.value)}
-          />
+          {/* Selected date */}
+          <div style={{ marginBottom: "12px" }}>
+            <label style={labelStyle}>Selected date</label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
 
-          <label className="tfh-label">Selected date</label>
-          <input
-            type="date"
-            className="tfh-input"
-            value={dateFilterIso}
-            onChange={(e) => {
-              setDateFilterIso(e.target.value);
-              setSelectedDate(e.target.value);
-            }}
-          />
+          <p style={{ fontSize: 11, color: "#555", marginTop: "8px" }}>
+            Tip: choose a date where a helper has set availability and type a
+            keyword matching their services.
+          </p>
         </div>
 
-        {/* CENTER CALENDAR */}
-        <div className="tfh-center-panel">
-          <FullCalendar
-            ref={calendarRef}
-            plugins={[dayGridPlugin, interactionPlugin]}
-            initialView="dayGridMonth"
-            events={calendarEvents}
-            height="78vh"
-            customButtons={{
-              myToday: {
-                text: "Today",
-                click: handleTodayClick,
-              },
+        {/* MIDDLE: CALENDAR */}
+        <div style={{ flex: 1 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              marginBottom: "10px",
+              gap: "12px",
             }}
-            headerToolbar={{
-              left: "myToday prev,next",
-              center: "title",
-              right: "",
+          >
+            <button
+              onClick={() => changeMonth(-1)}
+              style={navButtonStyle}
+            >
+              {"<"}
+            </button>
+            <h2 style={{ margin: 0 }}>
+              {currentMonth.toLocaleString("default", {
+                month: "long",
+              })}{" "}
+              {year}
+            </h2>
+            <button
+              onClick={() => changeMonth(1)}
+              style={navButtonStyle}
+            >
+              {">"}
+            </button>
+          </div>
+
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              background: "#fff",
+              borderRadius: "8px",
+              overflow: "hidden",
+              border: "1px solid #e0e4ee",
             }}
-            dateClick={handleDateClick}
-            dayCellClassNames={dayCellClassNames}
-          />
+          >
+            <thead>
+              <tr style={{ background: "#f0f3fa" }}>
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                  (d) => (
+                    <th
+                      key={d}
+                      style={{
+                        padding: "6px 0",
+                        fontSize: "12px",
+                        borderBottom: "1px solid #e0e4ee",
+                      }}
+                    >
+                      {d}
+                    </th>
+                  )
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {weeks.map((week, wi) => (
+                <tr key={wi}>
+                  {week.map((day, di) => {
+                    if (!day) {
+                      return (
+                        <td
+                          key={di}
+                          style={{
+                            height: "60px",
+                            border: "1px solid #f2f2f2",
+                          }}
+                        ></td>
+                      );
+                    }
+
+                    const dateObj = new Date(year, month, day);
+                    const dateStr = formatDate(dateObj);
+                    const isSelected = dateStr === selectedDate;
+
+                    return (
+                      <td
+                        key={di}
+                        onClick={() => handleDayClick(day)}
+                        style={{
+                          height: "60px",
+                          border: "1px solid #f2f2f2",
+                          textAlign: "right",
+                          padding: "4px 6px",
+                          cursor: "pointer",
+                          background: isSelected ? "#e1f0ff" : "#fff",
+                          color: isSelected ? "#003f63" : "#333",
+                          fontSize: "12px",
+                        }}
+                      >
+                        {day}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        {/* RIGHT RESULTS PANEL */}
-        <div className="tfh-right-panel">
-          <h3>Available helpers</h3>
-          {results.length === 0 && (
-            <p>No helpers found for this selection.</p>
+        {/* RIGHT: AVAILABLE HELPERS */}
+        <div
+          style={{
+            width: "260px",
+            background: "#f6f8fb",
+            padding: "16px",
+            borderRadius: "8px",
+            border: "1px solid #e0e4ee",
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>Available helpers</h3>
+
+          {mode === "offering" && (
+            <p style={{ fontSize: 13 }}>
+              Helper view: switch to{" "}
+              <strong>&quot;I am looking for&quot;</strong> to search
+              helpers as a customer.
+            </p>
           )}
 
-          {results.map((h) => (
-            <div key={h._id} className="tfh-helper-card">
-              <h4>{h.name}</h4>
-              <p>Service: {h.services}</p>
-              {h.price && <p>Price: ${h.price}/hr</p>}
-              <button
-                className="tfh-book-button"
-                onClick={() => handleBookClick(h)}
-              >
-                Book helper
-              </button>
-            </div>
-          ))}
+          {mode === "looking" && filteredHelpers.length === 0 && (
+            <p style={{ fontSize: 13 }}>
+              No helpers found for this selection.
+              <br />
+              Try another keyword or date.
+            </p>
+          )}
+
+          {mode === "looking" &&
+            filteredHelpers.map((helper) => {
+              const profile = helper.profile || {};
+              const slots = (helper.availabilitySlots || []).filter(
+                (slot) => slot.date === selectedDate
+              );
+
+              return (
+                <div
+                  key={helper.id}
+                  style={{
+                    background: "#fff",
+                    borderRadius: "6px",
+                    padding: "10px",
+                    marginBottom: "10px",
+                    border: "1px solid #ddd",
+                    fontSize: "12px",
+                  }}
+                >
+                  <strong>
+                    {profile.displayName || helper.name || "Helper"}
+                  </strong>
+                  <div style={{ color: "#555", marginTop: "2px" }}>
+                    {profile.city || "Location not specified"}
+                  </div>
+                  {profile.services && (
+                    <div
+                      style={{
+                        marginTop: "4px",
+                        color: "#003f63",
+                      }}
+                    >
+                      {profile.services}
+                    </div>
+                  )}
+                  {slots.length > 0 && (
+                    <div style={{ marginTop: "4px" }}>
+                      <strong>Available:</strong>
+                      <ul
+                        style={{
+                          paddingLeft: "18px",
+                          margin: "2px 0",
+                        }}
+                      >
+                        {slots.map((slot) => (
+                          <li key={slot.id}>
+                            {slot.startTime}–{slot.endTime}{" "}
+                            {slot.rawServices &&
+                              `(${slot.rawServices})`}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
         </div>
       </div>
-    </>
+    </DashboardLayout>
   );
+}
+
+const labelStyle = {
+  display: "block",
+  marginBottom: "4px",
+  fontSize: "13px",
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: "8px",
+  borderRadius: "4px",
+  border: "1px solid #ccc",
+  fontSize: "14px",
+};
+
+const navButtonStyle = {
+  border: "1px solid #ccc",
+  background: "#fff",
+  borderRadius: "4px",
+  cursor: "pointer",
+  padding: "4px 8px",
 };
 
 export default HomePage;
-
-// ---------------------------------------------
-// STYLES
-// ---------------------------------------------
-const styles = {
-  page: {
-    display: "flex",
-    maxWidth: "1400px",
-    margin: "0 auto",
-    gap: "20px",
-    padding: "20px",
-  },
-
-  leftCol: {
-    width: "300px",
-    minWidth: "300px",
-    background: "#f2f5fa",
-    padding: "15px",
-    borderRadius: "8px",
-    border: "1px solid #dde4ef",
-    height: "82vh",
-    overflowY: "auto",
-  },
-
-  calendarCol: {
-    flex: 1,
-  },
-
-  rightCol: {
-    width: "300px",
-    minWidth: "300px",
-  },
-
-  tabs: {
-    display: "flex",
-    gap: "8px",
-    marginBottom: "10px",
-  },
-
-  tabActive: {
-    flex: 1,
-    background: "#0055aa",
-    color: "white",
-    borderRadius: "20px",
-    padding: "8px",
-    cursor: "pointer",
-    border: "none",
-  },
-
-  tabInactive: {
-    flex: 1,
-    background: "#d9dee7",
-    color: "#003366",
-    borderRadius: "20px",
-    padding: "8px",
-    cursor: "pointer",
-    border: "none",
-  },
-
-  label: {
-    marginTop: "8px",
-    fontWeight: 600,
-    fontSize: "14px",
-  },
-
-  input: {
-    width: "100%",
-    padding: "8px",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
-    marginTop: "4px",
-  },
-
-  suggestBox: {
-    background: "white",
-    borderRadius: "6px",
-    border: "1px solid #bcc6d2",
-    boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-    padding: "8px",
-    marginTop: "4px",
-    maxHeight: "160px",
-    overflowY: "auto",
-  },
-
-  suggestHeader: {
-    fontSize: "12px",
-    marginTop: "6px",
-    marginBottom: "3px",
-    fontWeight: "bold",
-    color: "#444",
-  },
-
-  suggestItem: {
-    padding: "5px",
-    borderRadius: "4px",
-    cursor: "pointer",
-  },
-
-  helperCard: {
-    background: "white",
-    padding: "10px",
-    borderRadius: "8px",
-    border: "1px solid #d0d9e6",
-    marginBottom: "12px",
-  },
-
-  bookBtn: {
-    marginTop: "6px",
-    background: "#0055aa",
-    border: "none",
-    padding: "8px 12px",
-    color: "white",
-    borderRadius: "6px",
-    cursor: "pointer",
-  },
-};

@@ -11,7 +11,7 @@ function HelperAvailability() {
     services: "",
   });
 
-  // Load account + existing slots from global helpers list
+  // Load current user + their existing availability slots from tfh_helpers
   useEffect(() => {
     try {
       const storedUser = localStorage.getItem("user");
@@ -41,12 +41,13 @@ function HelperAvailability() {
     const helpers = JSON.parse(rawHelpers);
 
     const others = helpers.filter((h) => h.id !== helperId);
-    const existing = helpers.find((h) => h.id === helperId) || {
-      id: helperId,
-      email: account.email,
-      name: account.name || "",
-      profile: JSON.parse(localStorage.getItem("helperProfile") || "{}"),
-    };
+    const existing =
+      helpers.find((h) => h.id === helperId) || {
+        id: helperId,
+        email: account.email,
+        name: account.name || "",
+        profile: JSON.parse(localStorage.getItem("helperProfile") || "{}"),
+      };
 
     const updatedHelper = {
       ...existing,
@@ -76,8 +77,8 @@ function HelperAvailability() {
       date: form.date, // YYYY-MM-DD
       startTime: form.startTime,
       endTime: form.endTime,
-      services: servicesTags, // e.g. ["carpenter","lawn"]
-      rawServices: form.services,
+      services: servicesTags, // ["carpenter","lawn"]
+      rawServices: form.services, // original text
     };
 
     const nextSlots = [...slots, newSlot];
@@ -169,6 +170,7 @@ function HelperAvailability() {
           onChange={handleFormChange}
           style={inputStyle}
           placeholder="Example: carpenter, lawn, snow removal"
+          autoComplete="off" // disable browser’s remembered text
         />
         <p style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
           You can offer more than one service in the same time slot. Separate
