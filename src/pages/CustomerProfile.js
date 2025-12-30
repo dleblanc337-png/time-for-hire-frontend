@@ -12,12 +12,10 @@ function CustomerProfile() {
         const parsed = JSON.parse(storedUser);
         setUser(parsed);
 
-        // If this user is a helper, load helperProfile from localStorage
-        if (parsed.role === "helper") {
-          const hp = localStorage.getItem("helperProfile");
-          if (hp) {
-            setHelperProfile(JSON.parse(hp));
-          }
+        // Try to load helperProfile from localStorage
+        const hp = localStorage.getItem("helperProfile");
+        if (hp) {
+          setHelperProfile(JSON.parse(hp));
         }
       }
     } catch (e) {
@@ -34,7 +32,8 @@ function CustomerProfile() {
     );
   }
 
-  const isHelper = user.role === "helper";
+  // Treat as helper if role is 'helper' OR a helperProfile exists
+  const isHelper = user.role === "helper" || !!helperProfile;
 
   return (
     <DashboardLayout>
@@ -46,7 +45,7 @@ function CustomerProfile() {
           background: "#fff",
           padding: "20px",
           borderRadius: "8px",
-          border: "1px solid #ddd",
+          border: "1px solid "#ddd",
           marginBottom: "20px",
           maxWidth: "500px",
         }}
@@ -60,7 +59,7 @@ function CustomerProfile() {
           <strong>Email:</strong> {user.email}
         </p>
         <p>
-          <strong>Role:</strong> {user.role}
+          <strong>Role:</strong> {user.role || "user"}
         </p>
       </div>
 
