@@ -3,160 +3,157 @@ import DashboardLayout from "../components/DashboardLayout";
 import { getLedger } from "../utils/ledger";
 
 function HelperEarnings() {
-  const [expandedBookingId, setExpandedBookingId] = useState(null);
+  const [open, setOpen] = useState(null);
   const ledger = getLedger();
 
-  const currentYear = new Date().getFullYear();
-
   const {
-    totalEarnedThisYear,
-    totalPendingThisYear,
-    totalCompletedThisYear,
-    totalCharityThisYear,
-    sortedEntries
+    pending,
+    released,
+    totalPending,
+    totalReleased,
+    totalCharity
   } = useMemo(() => {
-    let earned = 0;
-    let pending = 0;
-    let completed = 0;
-    let charity = 0;
+    const pending = [];
+    const released = [];
 
-    const entries = [...ledger].sort((a, b) => {
-      const ta = new Date(a.timestamp || a.completedAt || 0).getTime();
-      const tb = new Date(b.timestamp || b.completedAt || 0).getTime();
-      return tb - ta;
-    });
+    let totalPending = 0;
+    let totalReleased = 0;
+    let totalCharity = 0;
 
-    entries.forEach((e) => {
-      const year = new Date(e.timestamp || e.completedAt || 0).getFullYear();
-      if (!year || year !== currentYear) return;
+    ledger.forEach(e => {
+      if (!e.helperReceives) return;
 
-      const helper = Number(e.helperReceives || 0);
-      const charityPart = Number(e.charityAmount || 0);
+      totalCharity += Number(e.charityAmount || 0);
 
-      if (e.status === "Completed") {
-        earned += helper;
-        completed += helper;
-        charity += charityPart;
-      } else if (e.status === "Paid") {
-        pending += helper;
+      if (e.payoutStatus === "pending") {
+        pending.push(e);
+        totalPending += Number(e.helperReceives);
+      }
+
+      if (e.payoutStatus === "released") {
+        released.push(e);
+        totalReleased += Number(e.helperReceives);
       }
     });
 
     return {
-      totalEarnedThisYear: earned.toFixed(2),
-      totalPendingThisYear: pending.toFixed(2),
-      totalCompletedThisYear: completed.toFixed(2),
-      totalCharityThisYear: charity.toFixed(2),
-      sortedEntries: entries
+      pending,
+      released,
+      totalPending: totalPending.toFixed(2),
+      totalReleased: totalReleased.toFixed(2),
+      totalCharity: totalCharity.toFixed(2)
     };
-  }, [ledger, currentYear]);
-
-  function toggleExpand(id) {
-    setExpandedBookingId((prev) => (prev === id ? null : id));
-  }
+  }, [ledger]);
 
   return (
     <DashboardLayout>
-      <h1>Helper Earnings</h1>
-      <p>Overview of what you’ve earned and are expected to earn.</p>
+      <h1>My Earnings</h1>
 
-      {/* Summary block */}
-      <div
-        style={{
-          marginTop: "20px",
-          marginBottom: "20px",
-          padding: "16px",
-          background: "#f5f5f5",
-          borderRadius: "8px",
-          maxWidth: "600px",
-        }}
-      >
-        <p><strong>Total Earned This Year:</strong> ${totalEarnedThisYear}</p>
-        <p><strong>Pending Earnings:</strong> ${totalPendingThisYear}</p>
-        <p><strong>Completed Earnings:</strong> ${totalCompletedThisYear}</p>
-        <p><strong>Charity Contributed:</strong> ${totalCharityThisYear}</p>
+      <div style={{ marginBottom: 20 }}>
+        <Summary label="Pending (escrow)" value={`$${totalPending}`} />
+        <Summary label="Paid Out" value={`$${totalReleased}`} />
+        <Summary label="Charity Contributed" value={`$${totalCharity}`} />
       </div>
 
-      {/* Ledger list */}
-      {sortedEntries.length === 0 && (
-        <p>No paid jobs recorded yet.</p>
-      )}
+      <Section title="Pending Payouts">
+        {pending.length === 0 && <p>No pending payouts.</p>}
 
-      {sortedEntries.map((e) => {
-        const date = e.completedAt || e.timestamp;
-        const displayDate = date
-          ? new Date(date).toLocaleString()
-          : "N/A";
-
-        const statusColor =
-          e.status === "Completed" ? "green" : e.status === "Paid" ? "orange" : "gray";
-
-        const isExpanded = expandedBookingId === e.bookingId;
-
-        return (
-          <div
+        {pending.map(e => (
+          <Item
             key={e.bookingId}
-            style={{
-              background: "#fff",
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "12px 16px",
-              marginBottom: "12px",
-              maxWidth: "700px",
-              cursor: "pointer",
-            }}
-            onClick={() => toggleExpand(e.bookingId)}
-          >
-            {/* Row header */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <div>
-                <strong>Job #{e.bookingId}</strong>{" "}
-                <span style={{ color: statusColor }}>({e.status})</span>
-                <div style={{ fontSize: "12px", color: "#555" }}>
-                  {displayDate}
-                </div>
-              </div>
+            e={e}
+            open={open}
+            setOpen={setOpen}
+            color="orange"
+            label="Waiting for payout (8-hour hold)"
+          />
+        ))}
+      </Section>
 
-              <div>
-                {e.status === "Completed" ? (
-                  <span><strong>Earned:</strong> ${e.helperReceives}</span>
-                ) : (
-                  <span><strong>Will Earn:</strong> ${e.helperReceives}</span>
-                )}
-              </div>
-            </div>
+      <Section title="Paid Out">
+        {released.length === 0 && <p>No released earnings yet.</p>}
 
-            {/* Dropdown details */}
-            {isExpanded && (
-              <div
-                style={{
-                  marginTop: "12px",
-                  paddingTop: "10px",
-                  borderTop: "1px solid #eee",
-                  fontSize: "14px",
-                }}
-              >
-                <p><strong>Base Amount:</strong> ${e.baseAmount}</p>
-                <p><strong>Customer Paid:</strong> ${e.totalCustomerCharge}</p>
-                <p><strong>Your Earnings:</strong> ${e.helperReceives}</p>
-                <p><strong>Charity Contribution:</strong> ${e.charityAmount}</p>
-                <p><strong>Estimated Stripe Fee:</strong> ${e.stripeFee}</p>
-                <p>
-                  <strong>PaymentIntent ID:</strong>{" "}
-                  {e.paymentIntentId || "Not recorded"}
-                </p>
-              </div>
-            )}
-          </div>
-        );
-      })}
+        {released.map(e => (
+          <Item
+            key={e.bookingId}
+            e={e}
+            open={open}
+            setOpen={setOpen}
+            color="green"
+            label="Paid"
+          />
+        ))}
+      </Section>
     </DashboardLayout>
+  );
+}
+
+function Summary({ label, value }) {
+  return (
+    <div
+      style={{
+        display: "inline-block",
+        marginRight: 14,
+        padding: "10px 14px",
+        border: "1px solid #ddd",
+        borderRadius: 8,
+        background: "#fff"
+      }}
+    >
+      <div style={{ fontSize: 12, color: "#444" }}>{label}</div>
+      <div style={{ fontWeight: "bold", fontSize: 18 }}>{value}</div>
+    </div>
+  );
+}
+
+function Section({ title, children }) {
+  return (
+    <div style={{ marginTop: 25 }}>
+      <h3>{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function Item({ e, open, setOpen, color, label }) {
+  const isOpen = open === e.bookingId;
+
+  return (
+    <div
+      style={{
+        border: "1px solid #ddd",
+        borderRadius: 6,
+        marginBottom: 10,
+        background: "#fff"
+      }}
+    >
+      <div
+        onClick={() => setOpen(isOpen ? null : e.bookingId)}
+        style={{
+          padding: 10,
+          cursor: "pointer",
+          display: "flex",
+          justifyContent: "space-between"
+        }}
+      >
+        <span>
+          Job #{e.bookingId} — <b>${e.helperReceives}</b>{" "}
+          <span style={{ color }}>{label}</span>
+        </span>
+
+        <span>{isOpen ? "▲" : "▼"}</span>
+      </div>
+
+      {isOpen && (
+        <div style={{ padding: 10, fontSize: 13, color: "#333" }}>
+          <p>Base Amount: ${e.baseAmount}</p>
+          <p>Platform Fee: ${e.platformFee}</p>
+          <p>Charity: ${e.charityAmount}</p>
+          <p>Stripe Fee: ${e.stripeFee}</p>
+          <p>You Receive: <b>${e.helperReceives}</b></p>
+        </div>
+      )}
+    </div>
   );
 }
 
