@@ -72,6 +72,11 @@ function DashboardLayout({ children }) {
                 Helper Profile
               </Link>
             </li>
+            <li style={{ marginBottom: "10px" }}>
+              <Link to="/helper-availability" style={linkStyle}>
+                Helper Availability
+              </Link>
+            </li>
 
             {/* Admin-only section */}
             {isAdmin && (

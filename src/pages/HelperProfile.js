@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 
 function HelperProfile() {
+  const [account, setAccount] = useState(null);
   const [profile, setProfile] = useState({
     displayName: "",
     city: "",
@@ -14,12 +15,17 @@ function HelperProfile() {
 
   const [savedMessage, setSavedMessage] = useState("");
 
-  // Load existing profile from localStorage
+  // Load account + existing helperProfile from localStorage
   useEffect(() => {
     try {
-      const stored = localStorage.getItem("helperProfile");
-      if (stored) {
-        setProfile(JSON.parse(stored));
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        setAccount(JSON.parse(storedUser));
+      }
+
+      const storedProfile = localStorage.getItem("helperProfile");
+      if (storedProfile) {
+        setProfile(JSON.parse(storedProfile));
       }
     } catch (e) {
       console.error("Error loading helperProfile from localStorage", e);
@@ -37,7 +43,7 @@ function HelperProfile() {
   function handleSave(e) {
     e.preventDefault();
 
-    // Prepare tags from services string (for future search)
+    // Build normalized service tags for search
     const rawServices = profile.services || "";
     const tags = rawServices
       .split(",")
@@ -46,11 +52,31 @@ function HelperProfile() {
 
     const toSave = {
       ...profile,
-      serviceTags: tags, // e.g. ["carpenter","cleaning","yard work"]
+      serviceTags: tags, // e.g. ["carpenter", "yard work"]
     };
 
     try {
+      // Save personal helperProfile
       localStorage.setItem("helperProfile", JSON.stringify(toSave));
+
+      // Also add/update this helper in a global helpers list
+      const helperId = account?.email || "unknown";
+      const existingRaw = localStorage.getItem("tfh_helpers") || "[]";
+      const existing = JSON.parse(existingRaw);
+
+      const others = existing.filter((h) => h.id !== helperId);
+
+      const helperRecord = {
+        id: helperId,
+        email: account?.email || "",
+        name: account?.name || toSave.displayName || "",
+        profile: toSave,
+        // availabilitySlots will be managed from HelperAvailability.js
+      };
+
+      const updated = [...others, helperRecord];
+      localStorage.setItem("tfh_helpers", JSON.stringify(updated));
+
       setSavedMessage("Profile saved successfully.");
       setTimeout(() => setSavedMessage(""), 3000);
     } catch (e) {
@@ -86,7 +112,7 @@ function HelperProfile() {
             border: "1px solid #ddd",
           }}
         >
-          <h3 style={{ marginTop: 0 }}>Edit Profile</h3>
+          <h3 style={{ marginTop: "0px" }}>Edit Profile</h3>
 
           <label style={labelStyle}>Display Name</label>
           <input
@@ -135,11 +161,11 @@ function HelperProfile() {
             value={profile.services}
             onChange={handleChange}
             style={inputStyle}
-            placeholder="Example: carpenter, cleaning, yard work, grocery runs"
+            placeholder="Example: carpenter, lawn care, snow removal, tutoring"
           />
           <p style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
-            Separate services with commas. Later, customers searching &quot;carpenter&quot; will
-            match helpers who list &quot;carpenter&quot; here.
+            Separate services with commas. Customers searching &quot;carpenter&quot; or
+            &quot;lawn&quot; will match these keywords.
           </p>
 
           <label style={labelStyle}>Hourly Rate (approx.)</label>
@@ -153,7 +179,7 @@ function HelperProfile() {
             min="0"
           />
 
-          <label style={labelStyle}>Availability / Schedule</label>
+          <label style={labelStyle}>Availability / Schedule (general)</label>
           <textarea
             name="availability"
             value={profile.availability}
@@ -193,7 +219,7 @@ function HelperProfile() {
             border: "1px solid #ddd",
           }}
         >
-          <h3 style={{ marginTop: 0 }}>Preview</h3>
+          <h3 style={{ marginTop: "0px" }}>Preview</h3>
           <p style={{ fontSize: "13px", color: "#555" }}>
             This is an example of how your profile might appear to customers.
           </p>

@@ -7,6 +7,8 @@ import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
+import HelperAvailability from "./pages/HelperAvailability";
+
 import CustomerDashboard from "./pages/CustomerDashboard";
 import CustomerHome from "./pages/CustomerHome";
 import CustomerProfile from "./pages/CustomerProfile";
@@ -46,7 +48,8 @@ function App() {
         <Route path="/helper-messages" element={<HelperMessages />} />
         <Route path="/helper-earnings" element={<HelperEarnings />} />
         <Route path="/helper-profile" element={<HelperProfile />} />
-
+        <Route path="/helper-availability" element={<HelperAvailability />} />
+        
         {/* Payments */}
         <Route path="/payment" element={<Payment />} />
         <Route path="/payment-success" element={<PaymentSuccess />} />
