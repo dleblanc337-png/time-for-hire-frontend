@@ -31,6 +31,9 @@ function HomePage() {
   // Calendar month state
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
+  // Today (for yellow highlight)
+  const todayStr = formatDate(new Date());
+
   // Load helpers registry from localStorage
   useEffect(() => {
     try {
@@ -92,26 +95,24 @@ function HomePage() {
     if (!slotMatch) return false;
 
     // ---- 3) distance filter (optional) ----
-    // We expect something like profile.maxDistanceKm (number)
     if (maxDistance) {
       const maxDistNum = Number(maxDistance);
       const helperDist =
         profile.maxDistanceKm ??
         profile.distanceKm ??
-        null; // be flexible with field name
+        null;
       if (helperDist != null && helperDist > maxDistNum) {
         return false;
       }
     }
 
     // ---- 4) price filter (optional) ----
-    // We expect something like profile.hourlyRate (number)
     if (maxPrice) {
       const maxPriceNum = Number(maxPrice);
       const rate =
         profile.hourlyRate ??
         profile.rate ??
-        null; // again, flexible with naming
+        null;
       if (rate != null && rate > maxPriceNum) {
         return false;
       }
@@ -175,7 +176,7 @@ function HomePage() {
         display: "flex",
         gap: "24px",
         alignItems: "stretch",
-        minHeight: "60vh",
+        minHeight: "80vh", // taller so it fills the screen better
         paddingBottom: "24px",
       }}
     >
@@ -362,6 +363,7 @@ function HomePage() {
                   const dateObj = new Date(year, month, day);
                   const dateStr = formatDate(dateObj);
                   const isSelected = dateStr === selectedDate;
+                  const isToday = dateStr === todayStr;
                   const helpersCount = dateHasHelpers[dateStr] || 0;
 
                   return (
@@ -375,7 +377,11 @@ function HomePage() {
                         textAlign: "right",
                         padding: "4px 6px",
                         cursor: "pointer",
-                        background: isSelected ? "#e1f0ff" : "#fff",
+                        background: isSelected
+                          ? "#e1f0ff"
+                          : isToday
+                          ? "#fff7c2" // soft yellow for TODAY
+                          : "#fff",
                         color: isSelected ? "#003f63" : "#333",
                         fontSize: "12px",
                       }}
