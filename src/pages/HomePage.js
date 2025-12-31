@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 // Format Date → "YYYY-MM-DD"
 function formatDate(d) {
@@ -33,6 +34,8 @@ function HomePage() {
 
   // Today (for yellow highlight)
   const todayStr = formatDate(new Date());
+
+  const navigate = useNavigate();
 
   // Load helpers registry from localStorage
   useEffect(() => {
@@ -123,6 +126,41 @@ function HomePage() {
 
   const filteredHelpers =
     mode === "looking" ? helpers.filter(helperMatches) : [];
+
+  // 👉 When user clicks "I am offering"
+  function handleOfferingClick() {
+    // Visually select the tab (even though we navigate away)
+    setMode("offering");
+
+    let user = null;
+    try {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        user = JSON.parse(storedUser);
+      }
+    } catch (e) {
+      console.error("Error reading user from localStorage", e);
+    }
+
+    // Not logged in → go to login
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    // Logged in → check role
+    const roleFromUser = user.role;
+    const roleFromStorage = localStorage.getItem("role");
+    const role = roleFromUser || roleFromStorage;
+
+    if (role === "helper") {
+      // TODO: adjust this path if your Helper Availability route is different
+      navigate("/helper-availability");
+    } else {
+      // Logged in but not helper → send to customer dashboard for now
+      navigate("/customer-dashboard");
+    }
+  }
 
   // ---- Calendar construction ----
   const year = currentMonth.getFullYear();
@@ -219,7 +257,7 @@ function HomePage() {
             I am looking for
           </button>
           <button
-            onClick={() => setMode("offering")}
+            onClick={handleOfferingClick}
             style={{
               flex: 1,
               padding: "8px",
