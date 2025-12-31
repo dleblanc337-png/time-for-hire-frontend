@@ -8,11 +8,25 @@ function formatDate(d) {
   return `${y}-${m}-${day}`;
 }
 
+// Format name → "First L."
+function formatHelperName(rawName) {
+  if (!rawName) return "Helper";
+  const parts = rawName.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  const first = parts[0];
+  const lastInitial = parts[1].charAt(0).toUpperCase();
+  return `${first} ${lastInitial}.`;
+}
+
 function HomePage() {
   const [mode, setMode] = useState("looking"); // "looking" or "offering"
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
   const [helpers, setHelpers] = useState([]);
+
+  // extra filters
+  const [maxDistance, setMaxDistance] = useState(""); // km
+  const [maxPrice, setMaxPrice] = useState(""); // $/hr
 
   // Calendar month state
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -42,7 +56,7 @@ function HomePage() {
     const tags = profile.serviceTags || [];
     const slots = helper.availabilitySlots || [];
 
-    // 1) services / tags match
+    // ---- 1) services / tags match ----
     const servicesText = (profile.services || "").toLowerCase();
 
     const tagMatch =
@@ -57,7 +71,7 @@ function HomePage() {
 
     if (!servicesMatch) return false;
 
-    // 2) date + slot match
+    // ---- 2) date + slot match ----
     if (!selectedDate) return servicesMatch;
 
     const slotMatch = slots.some((slot) => {
@@ -75,7 +89,35 @@ function HomePage() {
       return tagsOk || rawOk;
     });
 
-    return slotMatch;
+    if (!slotMatch) return false;
+
+    // ---- 3) distance filter (optional) ----
+    // We expect something like profile.maxDistanceKm (number)
+    if (maxDistance) {
+      const maxDistNum = Number(maxDistance);
+      const helperDist =
+        profile.maxDistanceKm ??
+        profile.distanceKm ??
+        null; // be flexible with field name
+      if (helperDist != null && helperDist > maxDistNum) {
+        return false;
+      }
+    }
+
+    // ---- 4) price filter (optional) ----
+    // We expect something like profile.hourlyRate (number)
+    if (maxPrice) {
+      const maxPriceNum = Number(maxPrice);
+      const rate =
+        profile.hourlyRate ??
+        profile.rate ??
+        null; // again, flexible with naming
+      if (rate != null && rate > maxPriceNum) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   const filteredHelpers =
@@ -128,7 +170,15 @@ function HomePage() {
   }
 
   return (
-    <div style={{ display: "flex", gap: "24px" }}>
+    <div
+      style={{
+        display: "flex",
+        gap: "24px",
+        alignItems: "stretch",
+        minHeight: "60vh",
+        paddingBottom: "24px",
+      }}
+    >
       {/* LEFT: Filters */}
       <div
         style={{
@@ -137,6 +187,8 @@ function HomePage() {
           padding: "20px",
           borderRadius: "8px",
           border: "1px solid #e0e4ee",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         {/* Mode toggle */}
@@ -202,9 +254,41 @@ function HomePage() {
           />
         </div>
 
+        {/* Distance radius filter */}
+        <div style={{ marginBottom: "12px" }}>
+          <label style={labelStyle}>Distance radius</label>
+          <select
+            value={maxDistance}
+            onChange={(e) => setMaxDistance(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">Any distance</option>
+            <option value="5">Within 5 km</option>
+            <option value="10">Within 10 km</option>
+            <option value="25">Within 25 km</option>
+            <option value="50">Within 50 km</option>
+          </select>
+        </div>
+
+        {/* Max price filter */}
+        <div style={{ marginBottom: "12px" }}>
+          <label style={labelStyle}>Max price ($/hr)</label>
+          <select
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">Any price</option>
+            <option value="25">Up to $25/hr</option>
+            <option value="50">Up to $50/hr</option>
+            <option value="75">Up to $75/hr</option>
+            <option value="100">Up to $100/hr</option>
+          </select>
+        </div>
+
         <p style={{ fontSize: 11, color: "#555", marginTop: "8px" }}>
           Tip: choose a date where a helper has set availability and type a
-          keyword matching their services.
+          keyword matching their services. Use filters to narrow down results.
         </p>
       </div>
 
@@ -331,6 +415,10 @@ function HomePage() {
           padding: "16px",
           borderRadius: "8px",
           border: "1px solid #e0e4ee",
+          display: "flex",
+          flexDirection: "column",
+          maxHeight: "70vh",
+          overflowY: "auto",
         }}
       >
         <h3 style={{ marginTop: 0 }}>Available helpers</h3>
@@ -358,6 +446,9 @@ function HomePage() {
               (slot) => slot.date === selectedDate
             );
 
+            const rawName = profile.displayName || helper.name || "Helper";
+            const displayName = formatHelperName(rawName);
+
             return (
               <div
                 key={helper.id}
@@ -370,9 +461,7 @@ function HomePage() {
                   fontSize: "12px",
                 }}
               >
-                <strong>
-                  {profile.displayName || helper.name || "Helper"}
-                </strong>
+                <strong>{displayName}</strong>
                 <div style={{ color: "#555", marginTop: "2px" }}>
                   {profile.city || "Location not specified"}
                 </div>
