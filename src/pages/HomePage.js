@@ -128,39 +128,29 @@ function HomePage() {
     mode === "looking" ? helpers.filter(helperMatches) : [];
 
   // 👉 When user clicks "I am offering"
-  function handleOfferingClick() {
-    // Visually select the tab (even though we navigate away)
-    setMode("offering");
+function handleOfferingClick() {
+  // visually show the tab as selected
+  setMode("offering");
 
-    let user = null;
-    try {
-      const storedUser = localStorage.getItem("user");
-      if (storedUser) {
-        user = JSON.parse(storedUser);
-      }
-    } catch (e) {
-      console.error("Error reading user from localStorage", e);
+  let user = null;
+  try {
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      user = JSON.parse(storedUser);
     }
-
-    // Not logged in → go to login
-    if (!user) {
-      navigate("/login");
-      return;
-    }
-
-    // Logged in → check role
-    const roleFromUser = user.role;
-    const roleFromStorage = localStorage.getItem("role");
-    const role = roleFromUser || roleFromStorage;
-
-    if (role === "helper") {
-      // TODO: adjust this path if your Helper Availability route is different
-      navigate("/helper-availability");
-    } else {
-      // Logged in but not helper → send to customer dashboard for now
-      navigate("/customer-dashboard");
-    }
+  } catch (e) {
+    console.error("Error reading user from localStorage", e);
   }
+
+  // Not logged in → go to login
+  if (!user) {
+    navigate("/login");
+    return;
+  }
+
+  // Logged in (any role) → go to helper availability
+  navigate("/helper-availability");
+}
 
   // ---- Calendar construction ----
   const year = currentMonth.getFullYear();
