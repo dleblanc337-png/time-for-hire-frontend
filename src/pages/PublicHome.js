@@ -1,12 +1,13 @@
 import React from "react";
 import HomePage from "./HomePage";
 
-export default function PublicHome() {
-  // We REUSE your HomePage logic,
-  // but we DO NOT wrap it inside DashboardLayout here.
+function PublicHome() {
+  // Public main home (no dashboard sidebar)
   return (
     <div style={{ padding: "20px" }}>
       <HomePage />
     </div>
   );
 }
+
+export default PublicHome;
