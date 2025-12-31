@@ -176,8 +176,9 @@ function HomePage() {
         display: "flex",
         gap: "24px",
         alignItems: "stretch",
-        minHeight: "80vh", // taller so it fills the screen better
+        height: "calc(100vh - 130px)", // fill almost all remaining screen
         paddingBottom: "24px",
+        boxSizing: "border-box",
       }}
     >
       {/* LEFT: Filters */}
@@ -190,6 +191,7 @@ function HomePage() {
           border: "1px solid #e0e4ee",
           display: "flex",
           flexDirection: "column",
+          height: "100%",
         }}
       >
         {/* Mode toggle */}
@@ -294,7 +296,14 @@ function HomePage() {
       </div>
 
       {/* MIDDLE: Calendar */}
-      <div style={{ flex: 1 }}>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+        }}
+      >
         <div
           style={{
             display: "flex",
@@ -326,6 +335,7 @@ function HomePage() {
             borderRadius: "8px",
             overflow: "hidden",
             border: "1px solid #e0e4ee",
+            flex: 1,
           }}
         >
           <thead>
@@ -366,6 +376,14 @@ function HomePage() {
                   const isToday = dateStr === todayStr;
                   const helpersCount = dateHasHelpers[dateStr] || 0;
 
+                  const baseBg = isSelected
+                    ? "#e1f0ff"
+                    : isToday
+                    ? "#fff7c2" // TODAY background
+                    : "#fff";
+
+                  const borderColor = isToday ? "#f2b600" : "#f2f2f2";
+
                   return (
                     <td
                       key={di}
@@ -373,17 +391,14 @@ function HomePage() {
                       style={{
                         position: "relative",
                         height: "60px",
-                        border: "1px solid #f2f2f2",
+                        border: `2px solid ${borderColor}`,
                         textAlign: "right",
                         padding: "4px 6px",
                         cursor: "pointer",
-                        background: isSelected
-                          ? "#e1f0ff"
-                          : isToday
-                          ? "#fff7c2" // soft yellow for TODAY
-                          : "#fff",
+                        background: baseBg,
                         color: isSelected ? "#003f63" : "#333",
                         fontSize: "12px",
+                        boxSizing: "border-box",
                       }}
                     >
                       {day}
@@ -423,7 +438,8 @@ function HomePage() {
           border: "1px solid #e0e4ee",
           display: "flex",
           flexDirection: "column",
-          maxHeight: "70vh",
+          height: "100%",
+          maxHeight: "100%",
           overflowY: "auto",
         }}
       >
