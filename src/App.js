@@ -7,7 +7,11 @@ import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
+import PublicHome from "./pages/PublicHome";
+
 import HelperAvailability from "./pages/HelperAvailability";
+
+import Dashboard from "./pages/Dashboard";
 
 import CustomerDashboard from "./pages/CustomerDashboard";
 import CustomerHome from "./pages/CustomerHome";
@@ -33,9 +37,10 @@ function App() {
 
       <Routes>
         {/* Public */}
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<PublicHome />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/dashboard" element={<Dashboard />} />
 
         {/* Customer Dashboard Hub */}
         <Route path="/customer-dashboard" element={<CustomerDashboard />} />
