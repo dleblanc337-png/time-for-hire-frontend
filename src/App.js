@@ -56,6 +56,23 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
+        {/* Legacy routes (old links) -> redirect to new clean routes */}
+        <Route path="/customer-dashboard" element={<Navigate to="/customer/dashboard" replace />} />
+        <Route path="/customer-home" element={<Navigate to="/customer/home" replace />} />
+        <Route path="/customer-profile" element={<Navigate to="/customer/profile" replace />} />
+        <Route path="/customer-bookings" element={<Navigate to="/customer/bookings" replace />} />
+        <Route path="/customer-messages" element={<Navigate to="/customer/messages" replace />} />
+
+        <Route path="/helper-dashboard" element={<Navigate to="/helper/dashboard" replace />} />
+        <Route path="/helper-profile" element={<Navigate to="/helper/profile" replace />} />
+        <Route path="/helper-availability" element={<Navigate to="/helper/availability" replace />} />
+        <Route path="/helper-messages" element={<Navigate to="/helper/messages" replace />} />
+        <Route path="/helper-earnings" element={<Navigate to="/helper/earnings" replace />} />
+
+        <Route path="/admin-ledger" element={<Navigate to="/admin/ledger" replace />} />
+        {/* Catch-all: never show a blank page */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+
         {/* Smart Dashboard */}
         <Route path="/dashboard" element={<DashboardRedirect />} />
 
