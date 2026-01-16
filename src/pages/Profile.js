@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
+import { suggestServices } from "../data/serviceKeywords";
 
 function safeParse(key, fallback) {
   try {
@@ -11,6 +12,23 @@ function safeParse(key, fallback) {
 }
 
 function Profile() {
+  // Predictive suggestions for the LAST comma-separated token
+  const serviceToken = (helper.services || "").split(",").pop()?.trim() || "";
+  const serviceSuggestions = suggestServices(serviceToken);
+
+  function applyServiceSuggestion(suggestion) {
+    const parts = (helper.services || "").split(",");
+    // replace last token with the suggestion
+    parts[parts.length - 1] = ` ${suggestion}`;
+    // normalize spacing and commas
+    const next = parts
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+      .join(", ");
+
+    setHelper((p) => ({ ...p, services: next + ", " })); // add trailing comma+space for easy next entry
+  }
+
   const account = useMemo(() => safeParse("user", null), []);
   const [base, setBase] = useState(() => safeParse("tfh_profile", {
     publicName: "",
@@ -263,12 +281,48 @@ function Profile() {
           <div style={{ marginTop: 14 }}>
             <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10 }}>
               <div style={labelStyle}>Service keywords *</div>
-              <input
-                value={helper.services}
-                onChange={(e) => setHelper((p) => ({ ...p, services: e.target.value }))}
-                style={inputStyle}
-                placeholder="Example: carpenter, lawn care, snow removal"
-              />
+
+<div style={{ position: "relative" }}>
+  <input
+    value={helper.services}
+    onChange={(e) => setHelper((p) => ({ ...p, services: e.target.value }))}
+    style={inputStyle}
+    placeholder="Example: carpenter, lawn care, snow removal"
+  />
+
+  {serviceSuggestions.length > 0 && serviceToken.length > 0 && (
+    <div
+      style={{
+        position: "absolute",
+        top: "100%",
+        left: 0,
+        right: 0,
+        background: "#fff",
+        border: "1px solid #ccc",
+        borderRadius: 6,
+        zIndex: 9999,
+        maxHeight: 180,
+        overflowY: "auto",
+      }}
+    >
+      {serviceSuggestions.map((s) => (
+        <div
+          key={s}
+          onClick={() => applyServiceSuggestion(s)}
+          style={{
+            padding: "8px 10px",
+            cursor: "pointer",
+            borderBottom: "1px solid #eee",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f5f5")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+        >
+          {s}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
 
               <div style={labelStyle}>City / area *</div>
               <input
