@@ -286,7 +286,7 @@ function handleOfferingClick() {
         background: "#fff",
         border: "1px solid #ccc",
         borderRadius: 4,
-        zIndex: 10,
+        zIndex: 9999,
         maxHeight: 180,
         overflowY: "auto",
       }}
