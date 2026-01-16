@@ -1,34 +1,49 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
 import Header from "./components/Header";
+import RequireAuth from "./components/RequireAuth";
 
-import HomePage from "./pages/HomePage";
+/* Public */
+import PublicHome from "./pages/PublicHome";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
-import PublicHome from "./pages/PublicHome";
-
-import HelperAvailability from "./pages/HelperAvailability";
-
-import Dashboard from "./pages/Dashboard";
-
+/* Dashboards */
 import CustomerDashboard from "./pages/CustomerDashboard";
+import HelperDashboard from "./pages/HelperDashboard";
+
+/* Customer */
 import CustomerHome from "./pages/CustomerHome";
 import CustomerProfile from "./pages/CustomerProfile";
 import CustomerBookings from "./pages/CustomerBookings";
 import CustomerMessages from "./pages/CustomerMessages";
-import HelperMessages from "./pages/HelperMessages";
 
-// Payments
+/* Helper */
+import HelperAvailability from "./pages/HelperAvailability";
+import HelperProfile from "./pages/HelperProfile";
+import HelperMessages from "./pages/HelperMessages";
+import HelperEarnings from "./pages/HelperEarnings";
+
+/* Payments */
 import Payment from "./pages/Payment";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
 
-// Dashboards
-import HelperEarnings from "./pages/HelperEarnings";
-import HelperProfile from "./pages/HelperProfile";
+/* Admin */
 import AdminLedger from "./pages/AdminLedger";
+
+/* Smart dashboard redirect */
+function DashboardRedirect() {
+  const user = JSON.parse(localStorage.getItem("user") || "null");
+
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === "helper") return <Navigate to="/helper/dashboard" replace />;
+  if (user.role === "customer") return <Navigate to="/customer/dashboard" replace />;
+  if (user.role === "admin") return <Navigate to="/admin/ledger" replace />;
+
+  return <Navigate to="/" replace />;
+}
 
 function App() {
   return (
@@ -40,28 +55,108 @@ function App() {
         <Route path="/" element={<PublicHome />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/dashboard" element={<Dashboard />} />
 
-        {/* Customer Dashboard Hub */}
-        <Route path="/customer-dashboard" element={<CustomerDashboard />} />
-        <Route path="/customer-home" element={<CustomerHome />} />
-        <Route path="/customer-profile" element={<CustomerProfile />} />
-        <Route path="/customer-bookings" element={<CustomerBookings />} />
-        <Route path="/customer-messages" element={<CustomerMessages />} />
+        {/* Smart Dashboard */}
+        <Route path="/dashboard" element={<DashboardRedirect />} />
+
+        {/* Customer */}
+        <Route
+          path="/customer/dashboard"
+          element={
+            <RequireAuth role="customer">
+              <CustomerDashboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/customer/home"
+          element={
+            <RequireAuth role="customer">
+              <CustomerHome />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/customer/profile"
+          element={
+            <RequireAuth role="customer">
+              <CustomerProfile />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/customer/bookings"
+          element={
+            <RequireAuth role="customer">
+              <CustomerBookings />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/customer/messages"
+          element={
+            <RequireAuth role="customer">
+              <CustomerMessages />
+            </RequireAuth>
+          }
+        />
 
         {/* Helper */}
-        <Route path="/helper-messages" element={<HelperMessages />} />
-        <Route path="/helper-earnings" element={<HelperEarnings />} />
-        <Route path="/helper-profile" element={<HelperProfile />} />
-        <Route path="/helper-availability" element={<HelperAvailability />} />
-        
+        <Route
+          path="/helper/dashboard"
+          element={
+            <RequireAuth role="helper">
+              <HelperDashboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/helper/profile"
+          element={
+            <RequireAuth role="helper">
+              <HelperProfile />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/helper/availability"
+          element={
+            <RequireAuth role="helper">
+              <HelperAvailability />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/helper/messages"
+          element={
+            <RequireAuth role="helper">
+              <HelperMessages />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/helper/earnings"
+          element={
+            <RequireAuth role="helper">
+              <HelperEarnings />
+            </RequireAuth>
+          }
+        />
+
         {/* Payments */}
         <Route path="/payment" element={<Payment />} />
         <Route path="/payment-success" element={<PaymentSuccess />} />
         <Route path="/payment-cancel" element={<PaymentCancel />} />
 
         {/* Admin */}
-        <Route path="/admin-ledger" element={<AdminLedger />} />
+        <Route
+          path="/admin/ledger"
+          element={
+            <RequireAuth role="admin">
+              <AdminLedger />
+            </RequireAuth>
+          }
+        />
       </Routes>
     </Router>
   );
