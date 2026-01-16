@@ -1,108 +1,85 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useMemo } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 
 function DashboardLayout({ children }) {
-  let user = null;
-  let email = null;
+  const location = useLocation();
 
-  try {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      user = JSON.parse(storedUser);
-      email = user.email;
+  const user = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "null");
+    } catch {
+      return null;
     }
-  } catch (e) {
-    console.error("Error reading user from localStorage", e);
-  }
+  }, []);
 
-  const isAdmin = email === "admin@timeforhire.ca";
+  const role = user?.role; // expected: "customer" | "helper" | "admin"
+
+  const linkStyle = ({ isActive }) => ({
+    display: "block",
+    padding: "10px 14px",
+    color: "#fff",
+    textDecoration: "none",
+    borderRadius: "8px",
+    margin: "4px 8px",
+    background: isActive ? "rgba(255,255,255,0.18)" : "transparent",
+    fontWeight: isActive ? 700 : 500,
+  });
+
+  // Single, clean menu. Show only what applies to the logged-in role.
+  const menu = [
+    { label: "My Profile", to: role === "helper" ? "/helper/profile" : "/customer/profile", show: !!role && role !== "admin" },
+    { label: "My Bookings", to: "/customer/bookings", show: role === "customer" },
+    { label: "My Messages", to: role === "helper" ? "/helper/messages" : "/customer/messages", show: role === "customer" || role === "helper" },
+    { label: "My Availability", to: "/helper/availability", show: role === "helper" },
+    { label: "My Earnings", to: "/helper/earnings", show: role === "helper" },
+
+    // Admin (keep minimal)
+    { label: "Admin Ledger", to: "/admin/ledger", show: role === "admin" },
+  ].filter((x) => x.show);
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      {/* Sidebar */}
+    <div style={{ display: "flex", minHeight: "calc(100vh - 80px)" }}>
+      {/* Left sidebar */}
       <aside
         style={{
-          width: "220px",
-          background: "#003f63",
+          width: 260,
+          background: "#083b5b",
           color: "#fff",
-          padding: "20px 15px",
+          padding: "18px 10px",
         }}
       >
-        <h2 style={{ fontSize: "18px", marginBottom: "20px" }}>Dashboard</h2>
+        <div style={{ fontSize: 20, fontWeight: 800, padding: "8px 12px" }}>
+          Dashboard
+        </div>
 
-        <nav>
-          <ul style={{ listStyle: "none", padding: 0 }}>
-            {/* Customer side */}
-            <li style={{ marginBottom: "10px" }}>
-              <Link to="/customer-dashboard" style={linkStyle}>
-                Customer Home
-              </Link>
-            </li>
-            <li style={{ marginBottom: "10px" }}>
-              <Link to="/customer-bookings" style={linkStyle}>
-                My Bookings
-              </Link>
-            </li>
-            <li style={{ marginBottom: "10px" }}>
-              <Link to="/customer-messages" style={linkStyle}>
-                My Messages
-              </Link>
-            </li>
-            <li style={{ marginBottom: "10px" }}>
-              <Link to="/customer-profile" style={linkStyle}>
-                My Profile
-              </Link>
-            </li>
+        <div style={{ height: 10 }} />
 
-            <hr style={{ borderColor: "#ffffff55", margin: "12px 0" }} />
+        {menu.map((item) => (
+          <NavLink key={item.to} to={item.to} style={linkStyle}>
+            {item.label}
+          </NavLink>
+        ))}
 
-            {/* Helper side */}
-            <li style={{ marginBottom: "10px" }}>
-              <Link to="/helper-messages" style={linkStyle}>
-                Helper Jobs
-              </Link>
-            </li>
-            <li style={{ marginBottom: "10px" }}>
-              <Link to="/helper-earnings" style={linkStyle}>
-                Helper Earnings
-              </Link>
-            </li>
-            <li style={{ marginBottom: "10px" }}>
-              <Link to="/helper-profile" style={linkStyle}>
-                Helper Profile
-              </Link>
-            </li>
-            <li style={{ marginBottom: "10px" }}>
-              <Link to="/helper-availability" style={linkStyle}>
-                Helper Availability
-              </Link>
-            </li>
+        {/* If for any reason role missing, give a safe way back */}
+        {!role && (
+          <NavLink to="/dashboard" style={linkStyle}>
+            Go to Dashboard
+          </NavLink>
+        )}
 
-            {/* Admin-only section */}
-            {isAdmin && (
-              <>
-                <hr style={{ borderColor: "#ffffff55", margin: "12px 0" }} />
-                <li style={{ marginBottom: "10px" }}>
-                  <Link to="/admin-ledger" style={linkStyle}>
-                    Admin Ledger
-                  </Link>
-                </li>
-              </>
-            )}
-          </ul>
-        </nav>
+        {/* Debug helper (optional): uncomment if you ever need to confirm role)
+        <div style={{ marginTop: 16, fontSize: 12, opacity: 0.75, padding: "0 12px" }}>
+          role: {String(role)} | path: {location.pathname}
+        </div>
+        */}
       </aside>
 
-      {/* Main content */}
-      <main style={{ flex: 1, padding: "20px" }}>{children}</main>
+      {/* Center content */}
+      <main style={{ flex: 1, background: "#fff", padding: 24 }}>
+        {children}
+      </main>
     </div>
   );
 }
-
-const linkStyle = {
-  color: "#fff",
-  textDecoration: "none",
-  fontSize: "14px",
-};
 
 export default DashboardLayout;
