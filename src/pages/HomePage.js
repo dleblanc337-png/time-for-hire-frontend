@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { suggestServices } from "../data/serviceKeywords";
 
 // Format Date → "YYYY-MM-DD"
 function formatDate(d) {
@@ -24,6 +25,7 @@ function HomePage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
   const [helpers, setHelpers] = useState([]);
+  const suggestions = suggestServices(searchTerm);
 
   // extra filters
   const [maxDistance, setMaxDistance] = useState(""); // km
@@ -263,16 +265,54 @@ function handleOfferingClick() {
         </div>
 
         {/* Search */}
-        <div style={{ marginBottom: "12px" }}>
-          <label style={labelStyle}>Search</label>
-          <input
-            type="text"
-            placeholder="carpenter, lawn, snow..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={inputStyle}
-          />
+<div style={{ marginBottom: "12px", position: "relative" }}>
+  <label style={labelStyle}>Search</label>
+
+  <input
+    type="text"
+    placeholder="carpenter, lawn, snow..."
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+    style={inputStyle}
+  />
+
+  {suggestions.length > 0 && (
+    <div
+      style={{
+        position: "absolute",
+        top: "100%",
+        left: 0,
+        right: 0,
+        background: "#fff",
+        border: "1px solid #ccc",
+        borderRadius: 4,
+        zIndex: 10,
+        maxHeight: 180,
+        overflowY: "auto",
+      }}
+    >
+      {suggestions.map((s) => (
+        <div
+          key={s}
+          onClick={() => setSearchTerm(s)}
+          style={{
+            padding: "6px 10px",
+            cursor: "pointer",
+            borderBottom: "1px solid #eee",
+          }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.background = "#f5f5f5")
+          }
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.background = "#fff")
+          }
+        >
+          {s}
         </div>
+      ))}
+    </div>
+  )}
+</div>
 
         {/* Selected date */}
         <div style={{ marginBottom: "12px" }}>
