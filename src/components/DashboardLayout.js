@@ -1,9 +1,7 @@
 import React, { useMemo } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 
 function DashboardLayout({ children }) {
-  const location = useLocation();
-
   const user = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("user") || "null");
@@ -12,7 +10,19 @@ function DashboardLayout({ children }) {
     }
   }, []);
 
-  const role = user?.role; // expected: "customer" | "helper" | "admin"
+  const helperEnabled = useMemo(() => {
+    try {
+      const hp = JSON.parse(localStorage.getItem("helperProfile") || "null");
+      const enabled = !!hp?.offerServices;
+      const hasServices = (hp?.services || "").trim().length > 0;
+      const hasCity = (hp?.city || "").trim().length > 0;
+      return enabled && hasServices && hasCity;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const role = user?.role; // keep for now (backend still uses it)
 
   const linkStyle = ({ isActive }) => ({
     display: "block",
@@ -25,21 +35,25 @@ function DashboardLayout({ children }) {
     fontWeight: isActive ? 700 : 500,
   });
 
-  // Single, clean menu. Show only what applies to the logged-in role.
   const menu = [
-    { label: "My Profile", to: role === "helper" ? "/helper/profile" : "/customer/profile", show: !!role && role !== "admin" },
-    { label: "My Bookings", to: "/customer/bookings", show: role === "customer" },
-    { label: "My Messages", to: role === "helper" ? "/helper/messages" : "/customer/messages", show: role === "customer" || role === "helper" },
-    { label: "My Availability", to: "/helper/availability", show: role === "helper" },
-    { label: "My Earnings", to: "/helper/earnings", show: role === "helper" },
+    { label: "My Profile", to: "/profile", show: true },
 
-    // Admin (keep minimal)
+    // Customer features (existing)
+    { label: "My Bookings", to: "/customer/bookings", show: role === "customer" },
+
+    // Messages can be unified later; for now keep your existing routes:
+    { label: "My Messages", to: role === "helper" ? "/helper/messages" : "/customer/messages", show: role === "customer" || role === "helper" },
+
+    // Helper features unlocked by Offer Services completion
+    { label: "My Availability", to: "/helper/availability", show: helperEnabled },
+    { label: "My Earnings", to: "/helper/earnings", show: helperEnabled },
+
+    // Admin (minimal)
     { label: "Admin Ledger", to: "/admin/ledger", show: role === "admin" },
   ].filter((x) => x.show);
 
   return (
     <div style={{ display: "flex", minHeight: "calc(100vh - 80px)" }}>
-      {/* Left sidebar */}
       <aside
         style={{
           width: 260,
@@ -59,22 +73,8 @@ function DashboardLayout({ children }) {
             {item.label}
           </NavLink>
         ))}
-
-        {/* If for any reason role missing, give a safe way back */}
-        {!role && (
-          <NavLink to="/dashboard" style={linkStyle}>
-            Go to Dashboard
-          </NavLink>
-        )}
-
-        {/* Debug helper (optional): uncomment if you ever need to confirm role)
-        <div style={{ marginTop: 16, fontSize: 12, opacity: 0.75, padding: "0 12px" }}>
-          role: {String(role)} | path: {location.pathname}
-        </div>
-        */}
       </aside>
 
-      {/* Center content */}
       <main style={{ flex: 1, background: "#fff", padding: 24 }}>
         {children}
       </main>

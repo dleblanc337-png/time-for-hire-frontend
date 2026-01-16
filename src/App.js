@@ -4,6 +4,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import Header from "./components/Header";
 import RequireAuth from "./components/RequireAuth";
 
+import Profile from "./pages/Profile";
+import RequireOfferServices from "./components/RequireOfferServices";
+
 /* Public */
 import PublicHome from "./pages/PublicHome";
 import Login from "./pages/Login";
@@ -55,6 +58,14 @@ function App() {
         <Route path="/" element={<PublicHome />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+<Route
+  path="/profile"
+  element={
+    <RequireAuth>
+      <Profile />
+    </RequireAuth>
+  }
+/>
 
         {/* Legacy routes (old links) -> redirect to new clean routes */}
         <Route path="/customer-dashboard" element={<Navigate to="/customer/dashboard" replace />} />
@@ -70,6 +81,9 @@ function App() {
         <Route path="/helper-earnings" element={<Navigate to="/helper/earnings" replace />} />
 
         <Route path="/admin-ledger" element={<Navigate to="/admin/ledger" replace />} />
+        <Route path="/customer/profile" element={<Navigate to="/profile" replace />} />
+<Route path="/helper/profile" element={<Navigate to="/profile" replace />} />
+
         {/* Catch-all: never show a blank page */}
         <Route path="*" element={<Navigate to="/" replace />} />
 
@@ -136,13 +150,15 @@ function App() {
           }
         />
         <Route
-          path="/helper/availability"
-          element={
-            <RequireAuth role="helper">
-              <HelperAvailability />
-            </RequireAuth>
-          }
-        />
+  path="/helper/availability"
+  element={
+    <RequireAuth>
+      <RequireOfferServices>
+        <HelperAvailability />
+      </RequireOfferServices>
+    </RequireAuth>
+  }
+/>
         <Route
           path="/helper/messages"
           element={
@@ -152,13 +168,15 @@ function App() {
           }
         />
         <Route
-          path="/helper/earnings"
-          element={
-            <RequireAuth role="helper">
-              <HelperEarnings />
-            </RequireAuth>
-          }
-        />
+  path="/helper/earnings"
+  element={
+    <RequireAuth>
+      <RequireOfferServices>
+        <HelperEarnings />
+      </RequireOfferServices>
+    </RequireAuth>
+  }
+/>
 
         {/* Payments */}
         <Route path="/payment" element={<Payment />} />
