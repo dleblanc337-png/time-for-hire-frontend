@@ -207,86 +207,92 @@ export default function HomePage() {
   }, [showDropdown]);
 
     // Load helpers (public) — reusable + refreshable
-  useEffect(() => {
-    let alive = true;
+useEffect(() => {
+  let alive = true;
 
-    async function load() {
-      setLoadingHelpers(true);
+  async function load() {
+    setLoadingHelpers(true);
+
+    // Always read local helpers first (works even if backend fails)
+    const localHelpers = (() => {
       try {
-        const url = joinUrl(API_BASE, "/api/helpers/public");
-        const data = await fetchJson(url);
-        if (!alive) return;
-        // Merge backend helpers with localStorage helpers (for availability just added)
-const localHelpers = (() => {
-  try {
-    return JSON.parse(localStorage.getItem("tfh_helpers") || "[]");
-  } catch {
-    return [];
-  }
-})();
-
-// Normalize local helpers to match backend shape
-const normalizedLocal = localHelpers.map((h) => ({
-  _id: h.id || h.email,
-  profile: h.profile || {},
-  availabilitySlots: Array.isArray(h.availabilitySlots) ? h.availabilitySlots : [],
-}));
-
-const merged = [...(Array.isArray(data) ? data : [])];
-
-// Add / overwrite with local helpers (email/id match)
-normalizedLocal.forEach((lh) => {
-  const idx = merged.findIndex(
-    (bh) => bh?._id === lh._id || bh?.email === lh._id
-  );
-  if (idx >= 0) {
-    merged[idx] = { ...merged[idx], availabilitySlots: lh.availabilitySlots };
-  } else {
-    merged.push(lh);
-  }
-});
-
-setHelpers(merged);
-
-      } catch (err) {
-        console.error("HomePage: failed to load public helpers:", err);
-        if (!alive) return;
-        setHelpers([]);
-      } finally {
-        if (alive) setLoadingHelpers(false);
+        return JSON.parse(localStorage.getItem("tfh_helpers") || "[]");
+      } catch {
+        return [];
       }
-    }
+    })();
 
-    // initial load
+    const normalizedLocal = localHelpers.map((h) => ({
+      _id: h.id || h.email,
+      email: h.email,
+      profile: h.profile || {},
+      availabilitySlots: Array.isArray(h.availabilitySlots) ? h.availabilitySlots : [],
+    }));
+
+    try {
+      const url = joinUrl(API_BASE, "/api/helpers/public");
+      const data = await fetchJson(url);
+      if (!alive) return;
+
+      const merged = [...(Array.isArray(data) ? data : [])];
+
+      // Merge local availability on top of backend helpers
+      normalizedLocal.forEach((lh) => {
+        const idx = merged.findIndex(
+          (bh) => bh?._id === lh._id || bh?.email === lh.email || bh?.email === lh._id
+        );
+
+        if (idx >= 0) {
+          merged[idx] = {
+            ...merged[idx],
+            availabilitySlots: lh.availabilitySlots, // local wins
+            profile: { ...merged[idx].profile, ...lh.profile },
+          };
+        } else {
+          merged.push(lh);
+        }
+      });
+
+      setHelpers(merged);
+    } catch (err) {
+      console.error("HomePage: failed to load public helpers:", err);
+      if (!alive) return;
+
+      // Fallback: still show local helpers
+      setHelpers(normalizedLocal);
+    } finally {
+      if (alive) setLoadingHelpers(false);
+    }
+  }
+
+  // initial load
+  load();
+
+  // refresh when coming back to the tab (very common after posting availability)
+  function onFocus() {
     load();
+  }
+  window.addEventListener("focus", onFocus);
 
-    // refresh when coming back to the tab (very common after posting availability)
-    function onFocus() {
-      load();
-    }
-    window.addEventListener("focus", onFocus);
+  // refresh when helper availability page sets a flag
+  function onStorage(e) {
+    if (e.key === "tfh_refresh_home") load();
+  }
+  window.addEventListener("storage", onStorage);
 
-    // refresh when helper availability page sets a flag
-    function onStorage(e) {
-      if (e.key === "tfh_refresh_home") load();
-    }
-    window.addEventListener("storage", onStorage);
+  // also refresh immediately if flag already exists (same-tab navigation)
+  const flag = localStorage.getItem("tfh_refresh_home");
+  if (flag) {
+    localStorage.removeItem("tfh_refresh_home");
+    load();
+  }
 
-    // also refresh immediately if flag already exists (same-tab navigation)
-    const flag = localStorage.getItem("tfh_refresh_home");
-    if (flag) {
-      // consume it so it doesn’t keep reloading
-      localStorage.removeItem("tfh_refresh_home");
-      load();
-    }
-
-    return () => {
-      alive = false;
-      window.removeEventListener("focus", onFocus);
-      window.removeEventListener("storage", onStorage);
-    };
-  }, [API_BASE]);
-
+  return () => {
+    alive = false;
+    window.removeEventListener("focus", onFocus);
+    window.removeEventListener("storage", onStorage);
+  };
+}, [API_BASE]);
 
   // Build calendar grid
   const monthDays = useMemo(() => {
