@@ -94,6 +94,30 @@ export default function HomePage() {
 
   const navigate = useNavigate();
 
+const [appliedSearch, setAppliedSearch] = useState("");
+const [appliedDate, setAppliedDate] = useState(formatDate(new Date()));
+const [appliedMaxDistance, setAppliedMaxDistance] = useState("");
+const [appliedMaxPrice, setAppliedMaxPrice] = useState("");
+
+function applyFilters() {
+  setAppliedSearch(searchTerm);
+  setAppliedDate(selectedDate);
+  setAppliedMaxDistance(maxDistance);
+  setAppliedMaxPrice(maxPrice);
+}
+
+function clearFilters() {
+  setSearchTerm("");
+  setSelectedDate(formatDate(new Date()));
+  setMaxDistance("");
+  setMaxPrice("");
+
+  setAppliedSearch("");
+  setAppliedDate(formatDate(new Date()));
+  setAppliedMaxDistance("");
+  setAppliedMaxPrice("");
+}
+
   // Load helpers registry from localStorage
   useEffect(() => {
     try {
@@ -126,8 +150,8 @@ export default function HomePage() {
 
   // Search tokens (support multiple comma separated terms)
   const searchTokens = useMemo(() => {
-    return splitCommaList(searchTerm).map(norm).filter(Boolean);
-  }, [searchTerm]);
+    return splitCommaList(appliedSearch).map(norm).filter(Boolean);
+  }, [appliedSearch]);
 
   // Click "I am offering"
   function handleOfferingClick() {
@@ -398,6 +422,40 @@ export default function HomePage() {
         {/* Price */}
         <div style={{ marginBottom: "12px" }}>
           <label style={labelStyle}>Max price ($/hr)</label>
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+  <button
+    onClick={applyFilters}
+    style={{
+      flex: 1,
+      padding: "10px 12px",
+      borderRadius: 8,
+      border: "1px solid #0f4c73",
+      background: "#0f4c73",
+      color: "#fff",
+      fontWeight: 800,
+      cursor: "pointer",
+    }}
+  >
+    Apply Filters
+  </button>
+
+  <button
+    onClick={clearFilters}
+    style={{
+      padding: "10px 12px",
+      borderRadius: 8,
+      border: "1px solid #cfd7e6",
+      background: "#fff",
+      color: "#0f4c73",
+      fontWeight: 800,
+      cursor: "pointer",
+      width: 90,
+    }}
+  >
+    Clear
+  </button>
+</div>
+
           <select value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} style={inputStyle}>
             <option value="">Any price</option>
             <option value="25">Up to $25/hr</option>
@@ -558,7 +616,20 @@ export default function HomePage() {
                       const rate = s.pricePerHour ?? s.hourlyRate ?? null;
                       return (
                         <li key={i} style={{ marginBottom: 4 }}>
-                          {s.start || "??"}–{s.end || "??"}{" "}
+                          const start =
+  s.start ||
+  s.startTime ||
+  s.timeFrom ||
+  (typeof s.time === "string" ? s.time.split("-")[0]?.trim() : null) ||
+  "??";
+
+const end =
+  s.end ||
+  s.endTime ||
+  s.timeTo ||
+  (typeof s.time === "string" ? s.time.split("-")[1]?.trim() : null) ||
+  "??";
+
                           {serviceText ? `(${serviceText})` : ""}
                           {rate != null ? ` — $${rate}/hr` : ""}
                         </li>
