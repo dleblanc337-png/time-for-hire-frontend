@@ -3,15 +3,15 @@ import { suggestServices } from "../data/serviceKeywords";
 
 /**
  * HomePage.js
- * - TODAY highlight steady (yellow) independent from selected date
- * - Selected date highlight blue
- * - Predictive dropdown uses SAME logic as Profile.js via suggestServices()
+ * - TODAY highlight steady (yellow) always
+ * - Selected date highlight (blue border) follows clicks immediately
+ * - Predictive dropdown same behavior as Profile.js via suggestServices()
  * - Search (Apply) + Reset filters
- * - Calendar badges react to filters (keyword + max price)
- * - Render-safe: no ../utils/api import
+ * - Calendar "avail" badges react to applied filters (keyword + max price)
+ * - Better vertical fill: larger calendar cells + compact filter summary
  */
 
-// ---------- small helpers ----------
+// ---------- helpers ----------
 function joinUrl(base, path) {
   const b = (base || "").replace(/\/+$/, "");
   const p = (path || "").replace(/^\/+/, "");
@@ -112,37 +112,33 @@ function helperHasKeywordMatch(helper, keyword) {
     .join(" ")
     .toLowerCase();
 
-  const tagHit = tags.some((t) => t.includes(term));
-  const servicesHit = servicesText.includes(term);
-  const slotHit = slotText.includes(term);
-
-  return tagHit || servicesHit || slotHit;
+  return (
+    tags.some((t) => t.includes(term)) ||
+    servicesText.includes(term) ||
+    slotText.includes(term)
+  );
 }
 
 // ---------- component ----------
 export default function HomePage() {
-  // steady "today"
   const todayStr = useMemo(() => formatDate(new Date()), []);
 
-  // UI: mode
   const [mode, setMode] = useState("looking"); // "looking" | "offering"
 
-  // Applied filters (what the calendar/results use)
+  // Applied filters (drive calendar + results)
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [radius, setRadius] = useState("any");   // placeholder (no geo yet)
+  const [radius, setRadius] = useState("any"); // placeholder
   const [maxPrice, setMaxPrice] = useState("any");
 
-  // Draft filters (what user edits before pressing Search/Apply)
+  // Draft filters (what user types before Search)
   const [draftSearch, setDraftSearch] = useState("");
   const [draftSelectedDate, setDraftSelectedDate] = useState(todayStr);
   const [draftRadius, setDraftRadius] = useState("any");
   const [draftMaxPrice, setDraftMaxPrice] = useState("any");
 
-  // data
   const [helpers, setHelpers] = useState([]);
 
-  // month view
   const [viewMonth, setViewMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -185,9 +181,7 @@ export default function HomePage() {
     return viewMonth.toLocaleString("default", { month: "long", year: "numeric" });
   }, [viewMonth]);
 
-  // -------------------------
-  // Dropdown suggestions (same pattern as Profile.js)
-  // -------------------------
+  // Dropdown suggestions like Profile (comma-separated token)
   const serviceToken = (draftSearch || "").split(",").pop()?.trim() || "";
   const serviceSuggestions = suggestServices(serviceToken);
 
@@ -201,13 +195,10 @@ export default function HomePage() {
       .filter((p) => p.length > 0)
       .join(", ");
 
-    // trailing comma-space to keep entering
     setDraftSearch(next ? `${next}, ` : "");
   }
 
-  // -------------------------
-  // Apply / Reset
-  // -------------------------
+  // Apply/Reset
   function onApplyFilters() {
     setSearchTerm(draftSearch);
     setSelectedDate(draftSelectedDate);
@@ -227,40 +218,38 @@ export default function HomePage() {
     setMaxPrice("any");
   }
 
+  // When clicking calendar: date should immediately follow (no Search required)
+  function onPickDate(dateStr) {
+    setDraftSelectedDate(dateStr);
+    setSelectedDate(dateStr); // <-- immediate apply for date only
+  }
+
   const normalizedAppliedTerm = useMemo(() => normalizeTerm(searchTerm), [searchTerm]);
 
-  // -------------------------
-  // Filtered helpers (right column)
-  // -------------------------
+  // Right column helpers filtered
   function helperMatches(helper) {
-    const profile = helper?.profile || {};
     const slots = safeArr(helper?.availabilitySlots);
 
-    // must have slot on selected date
     const hasDate = slots.some((s) => s?.date === selectedDate);
     if (!hasDate) return false;
 
-    // keyword match
-    if (normalizedAppliedTerm) {
-      if (!helperHasKeywordMatch(helper, normalizedAppliedTerm)) return false;
+    if (normalizedAppliedTerm && !helperHasKeywordMatch(helper, normalizedAppliedTerm)) {
+      return false;
     }
 
-    // price filter
     if (maxPrice !== "any") {
       const max = Number(maxPrice);
       const slotsOnDate = slots.filter((s) => s?.date === selectedDate);
 
       const ok = slotsOnDate.some((s) => {
         const r = extractRate(s);
-        if (r == null) return true; // if missing, don't hide helper
+        if (r == null) return true; // don't hide if missing
         return r <= max;
       });
 
       if (!ok) return false;
     }
 
-    // radius is placeholder
-    void profile;
     return true;
   }
 
@@ -269,24 +258,17 @@ export default function HomePage() {
     return helpers.filter((h) => helperMatches(h));
   }, [helpers, mode, selectedDate, normalizedAppliedTerm, maxPrice, radius]);
 
-  // -------------------------
-  // Calendar badge counts SHOULD be reactive to filters
-  // (keyword + max price; radius still placeholder)
-  // -------------------------
+  // Calendar badge counts reactive to applied filters
   const helperCountByDate = useMemo(() => {
     const map = {};
     if (mode !== "looking") return map;
 
     helpers.forEach((helper) => {
-      // If keyword filter is active, skip helper if it doesn't match anywhere
-      if (normalizedAppliedTerm && !helperHasKeywordMatch(helper, normalizedAppliedTerm)) {
-        return;
-      }
+      if (normalizedAppliedTerm && !helperHasKeywordMatch(helper, normalizedAppliedTerm)) return;
 
       safeArr(helper?.availabilitySlots).forEach((slot) => {
         if (!slot?.date) return;
 
-        // price filter affects badges too
         if (maxPrice !== "any") {
           const max = Number(maxPrice);
           const r = extractRate(slot);
@@ -329,7 +311,7 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* Search + suggestions (Profile-style) */}
+          {/* Search + suggestions */}
           <div style={{ marginBottom: 12 }}>
             <label style={styles.label}>Search</label>
 
@@ -349,8 +331,6 @@ export default function HomePage() {
                       key={s}
                       onClick={() => applyServiceSuggestion(s)}
                       style={styles.dropdownItem}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f5f5")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
                     >
                       {s}
                     </div>
@@ -365,7 +345,10 @@ export default function HomePage() {
             <input
               type="date"
               value={draftSelectedDate}
-              onChange={(e) => setDraftSelectedDate(e.target.value)}
+              onChange={(e) => {
+                setDraftSelectedDate(e.target.value);
+                setSelectedDate(e.target.value); // date follows immediately
+              }}
               style={styles.input}
             />
           </div>
@@ -402,7 +385,7 @@ export default function HomePage() {
           </div>
 
           <div style={{ fontSize: 12, color: "#666", marginTop: 10 }}>
-            Tip: type a keyword and pick from the dropdown (same as Profile). Press <b>Search</b> to apply filters.
+            Default: shows everything available. Add filters + press <b>Search</b> to narrow down.
           </div>
         </div>
 
@@ -434,6 +417,13 @@ export default function HomePage() {
             </button>
           </div>
 
+          {/* Compact summary (no big box taking space) */}
+          <div style={styles.filterLine}>
+            <span><b>Date:</b> {selectedDate}</span>
+            <span><b>Keywords:</b> {(searchTerm || "").trim() ? searchTerm : "Any"}</span>
+            <span><b>Max:</b> {maxPrice === "any" ? "Any" : `$${maxPrice}/hr`}</span>
+          </div>
+
           <table style={styles.calendarTable}>
             <thead>
               <tr>
@@ -453,36 +443,37 @@ export default function HomePage() {
                     const dateStr = formatDate(dayDate);
                     const inMonth = dayDate.getMonth() === viewMonth.getMonth();
 
-                    const isToday = dateStr === todayStr;      // steady highlight
-                    const isSelected = dateStr === selectedDate; // applied selected date
+                    const isToday = dateStr === todayStr;       // steady yellow
+                    const isSelected = dateStr === selectedDate; // blue border follows
 
                     const helpersCount = helperCountByDate[dateStr] || 0;
 
+                    // Base styles
                     let bg = inMonth ? "#fff" : "#f9fafb";
-                    let border = "1px solid #ddd";
+                    let borderColor = "#ddd";
+                    let borderWidth = 1;
 
-                    // TODAY should remain yellow unless you want selected to override.
-                    // Here: selected overrides today (blue wins) like your previous behavior.
+                    // TODAY: always yellow background
                     if (isToday) {
                       bg = "#fff5b5";
-                      border = "2px solid #f2c200";
+                      borderColor = "#f2c200";
+                      borderWidth = 2;
                     }
+
+                    // SELECTED: blue border (does not remove today yellow)
                     if (isSelected) {
-                      bg = "#dbeeff";
-                      border = "2px solid #67a9ff";
+                      borderColor = "#67a9ff";
+                      borderWidth = 2;
                     }
 
                     return (
                       <td
                         key={dateStr}
-                        onClick={() => {
-                          // clicking calendar picks date in *draft* first, then user can hit Search
-                          setDraftSelectedDate(dateStr);
-                        }}
+                        onClick={() => onPickDate(dateStr)}
                         style={{
                           ...styles.calendarTd,
                           background: bg,
-                          border,
+                          border: `${borderWidth}px solid ${borderColor}`,
                         }}
                       >
                         <div style={{ textAlign: "right" }}>{day}</div>
@@ -497,25 +488,6 @@ export default function HomePage() {
               ))}
             </tbody>
           </table>
-
-          {/* small area under calendar so it doesn't look empty */}
-          <div style={styles.summaryBox}>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Active filters</div>
-            <div style={{ fontSize: 13, color: "#333" }}>
-              <div>
-                <b>Date:</b> {selectedDate}
-              </div>
-              <div>
-                <b>Keywords:</b> {(searchTerm || "").trim() ? searchTerm : "Any"}
-              </div>
-              <div>
-                <b>Max price:</b> {maxPrice === "any" ? "Any" : `$${maxPrice}/hr`}
-              </div>
-              <div>
-                <b>Distance:</b> {radius === "any" ? "Any" : `${radius} km`}
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* RIGHT */}
@@ -532,7 +504,7 @@ export default function HomePage() {
             <p style={{ fontSize: 13 }}>
               No helpers found for this selection.
               <br />
-              Try a keyword + press <b>Search</b>.
+              Default shows everything available — add filters + press <b>Search</b> to narrow down.
             </p>
           )}
 
@@ -699,7 +671,7 @@ const styles = {
     justifyContent: "center",
     alignItems: "center",
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   navBtn: {
     border: "1px solid #ccc",
@@ -709,21 +681,35 @@ const styles = {
     padding: "4px 8px",
   },
 
+  filterLine: {
+    display: "flex",
+    gap: 14,
+    flexWrap: "wrap",
+    fontSize: 12,
+    color: "#333",
+    background: "#f6f8fb",
+    border: "1px solid #e0e4ee",
+    padding: "8px 10px",
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+
   calendarTable: {
     width: "100%",
     borderCollapse: "collapse",
     tableLayout: "fixed",
   },
   calendarTh: {
-    padding: "8px 0",
+    padding: "10px 0",
     borderBottom: "1px solid #ddd",
     fontSize: 13,
     background: "#f2f5f9",
   },
+  // Make calendar occupy most of panel height by using larger cells
   calendarTd: {
     position: "relative",
-    height: 74,
-    padding: "6px 8px",
+    height: 110, // <-- bigger than before, fills space
+    padding: "8px 10px",
     cursor: "pointer",
     fontSize: 12,
     verticalAlign: "top",
@@ -732,8 +718,8 @@ const styles = {
 
   availBadge: {
     position: "absolute",
-    left: 8,
-    bottom: 6,
+    left: 10,
+    bottom: 10,
     fontSize: 10,
     color: "#003f63",
     background: "#e1f0ff",
@@ -748,13 +734,5 @@ const styles = {
     marginBottom: 10,
     border: "1px solid #ddd",
     fontSize: 12,
-  },
-
-  summaryBox: {
-    marginTop: 14,
-    padding: 12,
-    borderRadius: 10,
-    border: "1px solid #e0e4ee",
-    background: "#f6f8fb",
   },
 };
