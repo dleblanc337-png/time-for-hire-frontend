@@ -2,16 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { suggestServices } from "../data/serviceKeywords";
 
 /**
- * HomePage.js
- * - TODAY highlight is steady (yellow) independent from selected date.
- * - Selected date highlight is blue.
- * - Predictive dropdown suggestions under Search (same keyword system as Profile).
- * - Search + Reset buttons.
- * - Calendar badges update live to keyword/price filters.
- * - Render-safe: no ../utils/api import.
+ * HomePage.js (stabilized)
+ * Fixes:
+ * 1) Predictive dropdown works after commas (uses the LAST token you type, replaces only that token)
+ * 2) Fixed header overlap while scrolling (adds top padding)
  */
 
-// ---------- helpers ----------
 function joinUrl(base, path) {
   const b = (base || "").replace(/\/+$/, "");
   const p = (path || "").replace(/^\/+/, "");
@@ -31,7 +27,6 @@ async function fetchJson(url) {
 function pad2(n) {
   return String(n).padStart(2, "0");
 }
-
 function formatDate(d) {
   const yyyy = d.getFullYear();
   const mm = pad2(d.getMonth() + 1);
@@ -72,13 +67,6 @@ function normalizeTerm(term) {
     .trim();
 }
 
-function splitKeywords(text) {
-  return String(text || "")
-    .split(/[,/|-]/g)
-    .map((x) => normalizeTerm(x))
-    .filter(Boolean);
-}
-
 function safeArr(v) {
   return Array.isArray(v) ? v : [];
 }
@@ -97,10 +85,10 @@ function toNumOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-function slotMatchesTerm(slot, termNorm) {
-  if (!termNorm) return true;
-  const hay = normalizeTerm(`${slot?.rawServices || ""} ${slot?.services || ""}`);
-  return hay.includes(termNorm);
+function slotPrice(slot) {
+  const v = slot?.price || slot?.hourlyRate || slot?.rate;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 function helperMatchesTerm(helper, termNorm) {
@@ -110,34 +98,51 @@ function helperMatchesTerm(helper, termNorm) {
   return hay.includes(termNorm);
 }
 
-function slotPrice(slot) {
-  const v = slot?.price || slot?.hourlyRate || slot?.rate;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+function slotMatchesTerm(slot, termNorm) {
+  if (!termNorm) return true;
+  const hay = normalizeTerm(`${slot?.rawServices || ""} ${slot?.services || ""}`);
+  return hay.includes(termNorm);
 }
 
-// ---------- component ----------
+/**
+ * IMPORTANT: parse "carpenter, garde" => last token is "garde"
+ */
+function getLastTokenForSuggest(fullText) {
+  const raw = String(fullText || "");
+  const parts = raw.split(",");
+  const last = parts[parts.length - 1] ?? "";
+  return normalizeTerm(last);
+}
+
+/**
+ * Replace only the last token in a comma-separated list.
+ * "carpenter, garde" + "gardener" => "carpenter, gardener"
+ * "carpenter" + "car cleaner" => "car cleaner"
+ */
+function replaceLastToken(fullText, picked) {
+  const raw = String(fullText || "");
+  const parts = raw.split(",");
+  if (parts.length === 1) return picked;
+  parts[parts.length - 1] = ` ${picked}`;
+  return parts.join(",").replace(/\s+/g, " ").replace(/\s+,/g, ",").trim();
+}
+
 export default function HomePage() {
-  // steady today
   const todayStr = useMemo(() => formatDate(new Date()), []);
 
-  // UI state
-  const [mode, setMode] = useState("looking"); // "looking" | "offering"
+  const [mode, setMode] = useState("looking");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDate, setSelectedDate] = useState(todayStr);
 
-  // filter controls
-  const [radius, setRadius] = useState("any"); // placeholder (not applied yet)
+  const [radius, setRadius] = useState("any"); // reserved for later
   const [maxPrice, setMaxPrice] = useState("any");
 
-  // “applied” filters (used for right panel list)
   const [applied, setApplied] = useState(() => ({
     term: "",
     maxPrice: "any",
     radius: "any",
   }));
 
-  // data
   const [helpers, setHelpers] = useState([]);
 
   // dropdown state
@@ -146,16 +151,13 @@ export default function HomePage() {
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
 
-  const normalizedTerm = useMemo(() => normalizeTerm(searchTerm), [searchTerm]);
-  const appliedTerm = useMemo(() => normalizeTerm(applied.term), [applied.term]);
-
   // month view
   const [viewMonth, setViewMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
 
-  // Load helpers/availability
+  // Load helpers
   useEffect(() => {
     async function load() {
       try {
@@ -172,16 +174,15 @@ export default function HomePage() {
     load();
   }, []);
 
-  // Calendar grid
   const monthDays = useMemo(() => {
     const first = startOfMonth(viewMonth);
     const last = endOfMonth(viewMonth);
 
     const start = new Date(first);
-    start.setDate(first.getDate() - first.getDay()); // sunday
+    start.setDate(first.getDate() - first.getDay());
 
     const end = new Date(last);
-    end.setDate(last.getDate() + (6 - last.getDay())); // saturday
+    end.setDate(last.getDate() + (6 - last.getDay()));
 
     const days = [];
     for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
@@ -194,15 +195,17 @@ export default function HomePage() {
     return viewMonth.toLocaleString("default", { month: "long", year: "numeric" });
   }, [viewMonth]);
 
-  // ---- Dropdown suggestions (same keyword pool as Profile) ----
+  // ---- Dropdown suggestions based on LAST token ----
+  const tokenForSuggest = useMemo(() => getLastTokenForSuggest(searchTerm), [searchTerm]);
+
   const suggestions = useMemo(() => {
-    // suggestServices should return array of strings
-    const list = suggestServices(normalizedTerm || "");
+    const list = suggestServices(tokenForSuggest || "");
     return (list || []).slice(0, 8);
-  }, [normalizedTerm]);
+  }, [tokenForSuggest]);
 
   function pickSuggestion(word) {
-    setSearchTerm(word);
+    // replace only the last token, keep earlier ones
+    setSearchTerm((prev) => replaceLastToken(prev, word));
     setShowDropdown(false);
     setActiveIndex(-1);
   }
@@ -242,29 +245,35 @@ export default function HomePage() {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [showDropdown]);
 
-  // ---- Calendar availability counts (LIVE using current searchTerm + maxPrice) ----
+  // ---- LIVE calendar badge counts (uses current searchTerm + maxPrice) ----
   const helperCountByDate = useMemo(() => {
-    const term = normalizedTerm;
+    const term = normalizeTerm(tokenForSuggest ? searchTerm : searchTerm); // keep consistent
     const max = toNumOrNull(maxPrice);
 
-    const counts = {}; // dateStr -> number
+    const counts = {};
     helpers.forEach((h) => {
       const slots = safeArr(h?.availabilitySlots);
 
-      // helper must broadly match term (profile text), OR any slot matches term
-      const helperOk = helperMatchesTerm(h, term);
+      // If they type multiple comma keywords, we treat it as "any match" across keywords:
+      const keywords = String(searchTerm || "")
+        .split(",")
+        .map((x) => normalizeTerm(x))
+        .filter(Boolean);
 
       slots.forEach((s) => {
         const dateStr = s?.date;
         if (!dateStr) return;
 
-        const termOk = term ? (helperOk || slotMatchesTerm(s, term)) : true;
+        const termOk =
+          keywords.length === 0
+            ? true
+            : keywords.some((kw) => helperMatchesTerm(h, kw) || slotMatchesTerm(s, kw));
+
         if (!termOk) return;
 
         if (max != null) {
           const p = slotPrice(s);
           if (p != null && p > max) return;
-          // if price missing, we still allow it (keeps calendar from looking empty)
         }
 
         counts[dateStr] = (counts[dateStr] || 0) + 1;
@@ -272,22 +281,26 @@ export default function HomePage() {
     });
 
     return counts;
-  }, [helpers, normalizedTerm, maxPrice]);
+  }, [helpers, searchTerm, maxPrice]);
 
   // ---- Right panel list (APPLIED filters, on Search button) ----
   const filteredHelpers = useMemo(() => {
     if (mode !== "looking") return [];
 
-    const term = appliedTerm;
     const max = toNumOrNull(applied.maxPrice);
+    const keywords = String(applied.term || "")
+      .split(",")
+      .map((x) => normalizeTerm(x))
+      .filter(Boolean);
 
     return helpers
       .map((h) => {
         const slots = safeArr(h?.availabilitySlots).filter((s) => s?.date === selectedDate);
 
-        const anySlotMatches = term
-          ? slots.some((s) => slotMatchesTerm(s, term)) || helperMatchesTerm(h, term)
-          : true;
+        const termOk =
+          keywords.length === 0
+            ? true
+            : slots.some((s) => keywords.some((kw) => helperMatchesTerm(h, kw) || slotMatchesTerm(s, kw)));
 
         const priceOk =
           max == null
@@ -297,17 +310,16 @@ export default function HomePage() {
                 return p == null || p <= max;
               });
 
-        // require at least one slot on selectedDate to show in right panel
         const hasSlots = slots.length > 0;
 
         return {
           ...h,
           _slotsOnSelectedDate: slots,
-          _matches: hasSlots && anySlotMatches && priceOk,
+          _matches: hasSlots && termOk && priceOk,
         };
       })
       .filter((h) => h._matches);
-  }, [helpers, selectedDate, appliedTerm, applied.maxPrice, mode]);
+  }, [helpers, selectedDate, applied.term, applied.maxPrice, mode]);
 
   function onSearchApply() {
     setApplied({
@@ -326,7 +338,6 @@ export default function HomePage() {
     setActiveIndex(-1);
   }
 
-  // ---- render ----
   return (
     <div style={styles.pageWrap}>
       <div style={styles.layoutWrap}>
@@ -353,7 +364,6 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* Search with dropdown */}
           <div style={{ marginBottom: 12, position: "relative", zIndex: 9999 }}>
             <label style={styles.label}>Search</label>
             <input
@@ -372,7 +382,7 @@ export default function HomePage() {
               autoComplete="off"
             />
 
-            {mode === "looking" && showDropdown && suggestions.length > 0 && (
+            {mode === "looking" && showDropdown && tokenForSuggest && suggestions.length > 0 && (
               <div ref={dropdownRef} style={styles.dropdown}>
                 {suggestions.map((s, idx) => (
                   <div
@@ -393,7 +403,6 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Selected date */}
           <div style={{ marginBottom: 12 }}>
             <label style={styles.label}>Selected date</label>
             <input
@@ -404,7 +413,6 @@ export default function HomePage() {
             />
           </div>
 
-          {/* Distance radius (kept for later use) */}
           <div style={{ marginBottom: 12 }}>
             <label style={styles.label}>Distance radius</label>
             <select value={radius} onChange={(e) => setRadius(e.target.value)} style={styles.input}>
@@ -415,14 +423,9 @@ export default function HomePage() {
             </select>
           </div>
 
-          {/* Max price */}
           <div style={{ marginBottom: 12 }}>
             <label style={styles.label}>Max price ($/hr)</label>
-            <select
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value)}
-              style={styles.input}
-            >
+            <select value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} style={styles.input}>
               <option value="any">Any price</option>
               <option value="20">$20/hr</option>
               <option value="30">$30/hr</option>
@@ -431,7 +434,6 @@ export default function HomePage() {
             </select>
           </div>
 
-          {/* Buttons */}
           <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
             <button style={styles.primaryBtn} onClick={onSearchApply}>
               Search
@@ -442,8 +444,7 @@ export default function HomePage() {
           </div>
 
           <div style={styles.tipBox}>
-            Default: shows everything available. Add filters + press <strong>Search</strong> to narrow
-            down.
+            Default: shows everything available. Add filters + press <strong>Search</strong> to narrow down.
           </div>
         </div>
 
@@ -499,9 +500,7 @@ export default function HomePage() {
                       const baseBg = inMonth ? "#fff" : "#f5f7fb";
                       let bg = baseBg;
 
-                      // TODAY steady yellow
                       if (isToday) bg = "#fff2a8";
-                      // Selected date blue (if today AND selected, keep yellow but outline blue)
                       if (isSelected && !isToday) bg = "#dceeff";
 
                       const borderColor = isSelected ? "#2b79ff" : "#d9dee8";
@@ -516,13 +515,12 @@ export default function HomePage() {
                             background: bg,
                             color: inMonth ? "#222" : "#8a93a3",
                             border: `${borderWidth}px solid ${borderColor}`,
+                            scrollMarginTop: 120,
                           }}
                         >
                           <div style={{ fontWeight: 700 }}>{day}</div>
 
-                          {helpersCount > 0 && (
-                            <div style={styles.availPill}>{helpersCount} avail</div>
-                          )}
+                          {helpersCount > 0 && <div style={styles.availPill}>{helpersCount} avail</div>}
                         </td>
                       );
                     })}
@@ -539,8 +537,7 @@ export default function HomePage() {
 
           {mode === "offering" && (
             <p style={{ fontSize: 13 }}>
-              Helper view: switch to <strong>&quot;I am looking for&quot;</strong> to search helpers
-              as a customer.
+              Helper view: switch to <strong>&quot;I am looking for&quot;</strong> to search helpers as a customer.
             </p>
           )}
 
@@ -548,8 +545,7 @@ export default function HomePage() {
             <p style={{ fontSize: 13 }}>
               No helpers found for this selection.
               <br />
-              Default shows everything available — add filters + press <strong>Search</strong> to
-              narrow down.
+              Default shows everything available — add filters + press <strong>Search</strong> to narrow down.
             </p>
           )}
 
@@ -566,9 +562,7 @@ export default function HomePage() {
               return (
                 <div key={key} style={styles.helperCard}>
                   <strong>{displayName}</strong>
-                  <div style={{ color: "#555", marginTop: 2 }}>
-                    {profile.city || "Location not specified"}
-                  </div>
+                  <div style={{ color: "#555", marginTop: 2 }}>{profile.city || "Location not specified"}</div>
 
                   {profile.services && <div style={styles.serviceLine}>Services: {profile.services}</div>}
 
@@ -594,12 +588,15 @@ export default function HomePage() {
   );
 }
 
-// ---------- styles ----------
 const styles = {
   pageWrap: {
     background: "#f0f2f5",
-    minHeight: "calc(100vh - 80px)", // fill below header
-    padding: 20,
+    // FIX header overlap: give breathing room under fixed header
+    paddingTop: 90,
+    paddingLeft: 20,
+    paddingRight: 20,
+    paddingBottom: 20,
+    minHeight: "100vh",
     boxSizing: "border-box",
   },
   layoutWrap: {
