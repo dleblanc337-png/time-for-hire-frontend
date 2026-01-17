@@ -493,21 +493,6 @@ export default function HomePage() {
             Default: shows everything available. Add filters + press <strong>Search</strong> to narrow down.
           </div>
 
-          <div style={styles.activeBox}>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Active filters</div>
-            <div style={styles.activeLine}>
-              <strong>Date:</strong> {selectedDate}
-            </div>
-            <div style={styles.activeLine}>
-              <strong>Keywords:</strong> {applied.term?.trim() ? applied.term.trim() : "Any"}
-            </div>
-            <div style={styles.activeLine}>
-              <strong>Price:</strong> {applied.maxPrice === "any" ? "Any" : `≤ $${applied.maxPrice}/hr`}
-            </div>
-            <div style={styles.activeLine}>
-              <strong>Distance:</strong> {applied.radius === "any" ? "Any" : `${applied.radius} km`}
-            </div>
-          </div>
         </div>
 
         {/* CENTER CALENDAR */}
@@ -797,19 +782,7 @@ const styles = {
     marginBottom: 12,
     lineHeight: 1.35,
   },
-
-  activeBox: {
-    background: "#fff",
-    border: "1px solid #dfe6f3",
-    borderRadius: 10,
-    padding: 12,
-  },
-  activeLine: {
-    fontSize: 12.5,
-    color: "#243041",
-    marginTop: 4,
-  },
-
+  
   monthNav: {
     display: "flex",
     justifyContent: "center",
