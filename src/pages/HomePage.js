@@ -161,6 +161,8 @@ export default function HomePage() {
   const [helpers, setHelpers] = useState([]);
   const [loadingHelpers, setLoadingHelpers] = useState(false);
 
+  const isLoggedIn = Boolean(localStorage.getItem("token"));
+
   // Dropdown behavior
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
@@ -635,15 +637,23 @@ export default function HomePage() {
 
                   {/* Placeholder for “contact” – we’ll wire this to Messages next */}
                   <button
-                    type="button"
-                    style={styles.contactBtn}
-                    onClick={() => {
-                      // later: navigate to messages thread / booking
-                      alert("Next step: wire this button to Messages (thread with this helper).");
-                    }}
-                  >
-                    Contact
-                  </button>
+  type="button"
+  style={{
+    ...styles.contactBtn,
+    opacity: isLoggedIn ? 1 : 0.85,
+  }}
+  onClick={() => {
+    if (!isLoggedIn) {
+      window.location.href = "/login";
+      return;
+    }
+
+    alert("Next step: wire this button to Messages (thread with this helper).");
+  }}
+>
+  {isLoggedIn ? "Contact" : "Log in to contact"}
+</button>
+
                 </div>
               );
             })}
@@ -782,7 +792,7 @@ const styles = {
     marginBottom: 12,
     lineHeight: 1.35,
   },
-  
+
   monthNav: {
     display: "flex",
     justifyContent: "center",
