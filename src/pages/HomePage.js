@@ -1,10 +1,9 @@
-// src/pages/HomePage.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { suggestServices } from "../data/serviceKeywords";
 
 /**
- * HomePage.js (FULL WORKING FILE) — MASTER
+ * HomePage.js (full file)
  * - Predictive dropdown suggestions (same dataset as Profile via suggestServices)
  * - TODAY highlight is steady yellow
  * - Selected date is obvious blue fill
@@ -12,9 +11,11 @@ import { suggestServices } from "../data/serviceKeywords";
  * - Calendar badges react to filters (keyword + price)
  * - Default view shows everything available (no filters)
  * - Render-safe: no ../utils/api import
- * - Availability shows on calendar even if backend fetch fails (localStorage fallback)
- * - “You are available” badge on dates you (logged-in user) posted availability (localStorage-based)
- * - Contact button opens /messages with selectedHelper, gated behind login
+ *
+ * Changes in THIS version:
+ * - ✅ "Contact" now navigates to /messages and selects/creates thread
+ * - ✅ Removed "You are available" badge entirely
+ * - ✅ Keeps your calendar sync logic (helpers merged from localStorage if present)
  */
 
 // ---------- helpers ----------
@@ -174,7 +175,7 @@ export default function HomePage() {
   const dropdownRef = useRef(null);
   const inputWrapRef = useRef(null);
 
-  // Predictive suggestions like Profile: use the last token after comma
+  // Predictive suggestions: use the last token after comma
   const token = useMemo(() => {
     const raw = String(searchTerm || "");
     const t = raw.split(",").pop()?.trim() || "";
@@ -212,56 +213,42 @@ export default function HomePage() {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [showDropdown]);
 
-  // Load helpers (public) — reusable + refreshable + local fallback
+  // Load helpers (public) — reusable + refreshable
   useEffect(() => {
     let alive = true;
 
     async function load() {
       setLoadingHelpers(true);
-
-      // Always read local first (so Home still works even if backend call fails)
-      const localHelpers = (() => {
-        try {
-          return JSON.parse(localStorage.getItem("tfh_helpers") || "[]");
-        } catch {
-          return [];
-        }
-      })();
-
-      const normalizedLocal = localHelpers.map((h) => ({
-        _id: h.id || h.email,
-        id: h.id,
-        email: h.email,
-        profile: h.profile || {},
-        availabilitySlots: Array.isArray(h.availabilitySlots) ? h.availabilitySlots : [],
-      }));
-
       try {
         const url = joinUrl(API_BASE, "/api/helpers/public");
         const data = await fetchJson(url);
         if (!alive) return;
 
+        // Merge backend helpers with localStorage helpers (for availability just added)
+        const localHelpers = (() => {
+          try {
+            return JSON.parse(localStorage.getItem("tfh_helpers") || "[]");
+          } catch {
+            return [];
+          }
+        })();
+
+        // Normalize local helpers to match backend shape
+        const normalizedLocal = localHelpers.map((h) => ({
+          _id: h.id || h.email,
+          email: h.email || "",
+          name: h.name || "",
+          profile: h.profile || {},
+          availabilitySlots: Array.isArray(h.availabilitySlots) ? h.availabilitySlots : [],
+        }));
+
         const merged = [...(Array.isArray(data) ? data : [])];
 
-        // Merge local availability on top of backend helpers
+        // Add / overwrite with local helpers (email/id match)
         normalizedLocal.forEach((lh) => {
-          const idx = merged.findIndex((bh) => {
-            const bhId = bh?._id || bh?.id || null;
-            const bhEmail = String(bh?.email || bh?.profile?.email || "").toLowerCase().trim();
-            const lhEmail = String(lh?.email || lh?.profile?.email || "").toLowerCase().trim();
-
-            if (bhId && lh._id && String(bhId) === String(lh._id)) return true;
-            if (bhEmail && lhEmail && bhEmail === lhEmail) return true;
-            return false;
-          });
-
+          const idx = merged.findIndex((bh) => bh?._id === lh._id || bh?.email === lh._id);
           if (idx >= 0) {
-            merged[idx] = {
-              ...merged[idx],
-              availabilitySlots: lh.availabilitySlots, // local wins (newest)
-              profile: { ...merged[idx]?.profile, ...lh.profile },
-              email: merged[idx]?.email || lh.email,
-            };
+            merged[idx] = { ...merged[idx], availabilitySlots: lh.availabilitySlots, profile: lh.profile || merged[idx].profile };
           } else {
             merged.push(lh);
           }
@@ -271,9 +258,7 @@ export default function HomePage() {
       } catch (err) {
         console.error("HomePage: failed to load public helpers:", err);
         if (!alive) return;
-
-        // Fallback: still show local helpers
-        setHelpers(normalizedLocal);
+        setHelpers([]);
       } finally {
         if (alive) setLoadingHelpers(false);
       }
@@ -282,7 +267,7 @@ export default function HomePage() {
     // initial load
     load();
 
-    // refresh when coming back to the tab
+    // refresh when coming back to the tab (common after posting availability)
     function onFocus() {
       load();
     }
@@ -307,27 +292,6 @@ export default function HomePage() {
       window.removeEventListener("storage", onStorage);
     };
   }, [API_BASE]);
-
-  // “You are available” dates (localStorage-based, logged-in only)
-  const myAvailDates = useMemo(() => {
-    if (!isLoggedIn) return new Set();
-
-    let localHelpers = [];
-    try {
-      localHelpers = JSON.parse(localStorage.getItem("tfh_helpers") || "[]");
-    } catch {
-      localHelpers = [];
-    }
-
-    const set = new Set();
-    localHelpers.forEach((h) => {
-      safeArr(h?.availabilitySlots).forEach((s) => {
-        if (s?.date) set.add(s.date);
-      });
-    });
-
-    return set;
-  }, [isLoggedIn]);
 
   // Build calendar grid
   const monthDays = useMemo(() => {
@@ -375,7 +339,9 @@ export default function HomePage() {
     setApplied({ term: "", radius: "any", maxPrice: "any" });
   }
 
-  // Calendar badges: count slots by day for helpers/slots matching applied filters (term + maxPrice)
+  // Filter logic:
+  // - Calendar badges: count slots by day for helpers/slots matching applied filters (term + maxPrice)
+  // - Right column list: only helpers who have at least one matching slot on selectedDate
   const helperCountByDate = useMemo(() => {
     const map = {};
     if (mode !== "looking") return map;
@@ -386,9 +352,7 @@ export default function HomePage() {
       const profile = h?.profile || {};
       const slots = safeArr(h?.availabilitySlots);
 
-      const slotsText = slots
-        .map((s) => `${s?.rawServices || ""} ${s?.services || ""}`)
-        .join(" ");
+      const slotsText = slots.map((s) => `${s?.rawServices || ""} ${s?.services || ""}`).join(" ");
 
       const helperTermOk = termMatchesSlotAndProfile({
         term: appliedTerm,
@@ -424,9 +388,7 @@ export default function HomePage() {
       const slotsOnDate = slots.filter((s) => s?.date === selectedDate);
       if (slotsOnDate.length === 0) return false;
 
-      const slotsText = slots
-        .map((s) => `${s?.rawServices || ""} ${s?.services || ""}`)
-        .join(" ");
+      const slotsText = slots.map((s) => `${s?.rawServices || ""} ${s?.services || ""}`).join(" ");
 
       const helperTermOk = termMatchesSlotAndProfile({
         term: appliedTerm,
@@ -444,8 +406,7 @@ export default function HomePage() {
         if (!ok) return false;
       }
 
-      // Radius placeholder (kept for later geo work)
-      return true;
+      return true; // radius placeholder
     });
   }, [helpers, mode, selectedDate, appliedTerm, applied.maxPrice]);
 
@@ -453,19 +414,37 @@ export default function HomePage() {
     return safeArr(helper?.availabilitySlots).filter((s) => s?.date === selectedDate);
   }
 
-  // Sync month view when selectedDate changes
+  // Sync viewMonth when selectedDate changes
   useEffect(() => {
     const d = parseDateStr(selectedDate);
     if (!d) return;
     const newMonth = new Date(d.getFullYear(), d.getMonth(), 1);
-    if (
-      newMonth.getFullYear() !== viewMonth.getFullYear() ||
-      newMonth.getMonth() !== viewMonth.getMonth()
-    ) {
+    if (newMonth.getFullYear() !== viewMonth.getFullYear() || newMonth.getMonth() !== viewMonth.getMonth()) {
       setViewMonth(newMonth);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
+
+  function onContact(helper) {
+    if (!isLoggedIn) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const profile = helper?.profile || {};
+    const rawName = profile.displayName || helper?.name || "Helper";
+    const displayName = formatHelperName(rawName);
+
+    // Use a stable thread key if possible
+    const threadKey = helper?._id || helper?.id || helper?.email || displayName;
+
+    navigate("/messages", {
+      state: {
+        selectedHelper: threadKey,
+        selectedHelperName: displayName,
+      },
+    });
+  }
 
   return (
     <div style={styles.pageWrap}>
@@ -496,10 +475,7 @@ export default function HomePage() {
           </div>
 
           {/* Search input + dropdown */}
-          <div
-            style={{ marginBottom: 12, position: "relative", zIndex: 9999 }}
-            ref={inputWrapRef}
-          >
+          <div style={{ marginBottom: 12, position: "relative", zIndex: 9999 }} ref={inputWrapRef}>
             <label style={styles.label}>Search</label>
             <input
               value={searchTerm}
@@ -555,11 +531,7 @@ export default function HomePage() {
 
           <div style={{ marginBottom: 14 }}>
             <label style={styles.label}>Max price ($/hr)</label>
-            <select
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value)}
-              style={styles.input}
-            >
+            <select value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} style={styles.input}>
               <option value="any">Any price</option>
               <option value="20">20</option>
               <option value="30">30</option>
@@ -580,8 +552,7 @@ export default function HomePage() {
           </div>
 
           <div style={styles.tipBox}>
-            Default: shows everything available. Add filters + press <strong>Search</strong> to narrow
-            down.
+            Default: shows everything available. Add filters + press <strong>Search</strong> to narrow down.
           </div>
         </div>
 
@@ -614,8 +585,8 @@ export default function HomePage() {
                     {week.map((dayDate) => {
                       const dateStr = formatDate(dayDate);
                       const inMonth = dayDate.getMonth() === viewMonth.getMonth();
-                      const isToday = dateStr === todayStr; // steady
-                      const isSelected = dateStr === selectedDate; // clicked
+                      const isToday = dateStr === todayStr;
+                      const isSelected = dateStr === selectedDate;
 
                       const helpersCount = helperCountByDate[dateStr] || 0;
 
@@ -646,17 +617,9 @@ export default function HomePage() {
                             color,
                           }}
                         >
-                          <div style={{ textAlign: "right", fontWeight: 700 }}>
-                            {dayDate.getDate()}
-                          </div>
+                          <div style={{ textAlign: "right", fontWeight: 700 }}>{dayDate.getDate()}</div>
 
-                          {helpersCount > 0 && (
-                            <div style={styles.availBadge}>{helpersCount} avail</div>
-                          )}
-
-                          {isLoggedIn && myAvailDates.has(dateStr) && (
-                            <div style={styles.myAvailBadge}>You are available</div>
-                          )}
+                          {helpersCount > 0 && <div style={styles.availBadge}>{helpersCount} avail</div>}
                         </td>
                       );
                     })}
@@ -666,7 +629,9 @@ export default function HomePage() {
             </table>
 
             {loadingHelpers && (
-              <div style={{ marginTop: 10, fontSize: 13, color: "#444" }}>Loading helpers…</div>
+              <div style={{ marginTop: 10, fontSize: 13, color: "#444" }}>
+                Loading helpers…
+              </div>
             )}
           </div>
         </div>
@@ -677,8 +642,7 @@ export default function HomePage() {
 
           {mode === "offering" && (
             <p style={{ fontSize: 13 }}>
-              Helper view: switch to <strong>&quot;I am looking for&quot;</strong> to search helpers
-              as a customer.
+              Helper view: switch to <strong>&quot;I am looking for&quot;</strong> to search helpers as a customer.
             </p>
           )}
 
@@ -686,8 +650,7 @@ export default function HomePage() {
             <p style={{ fontSize: 13 }}>
               No helpers found for this selection.
               <br />
-              Default shows everything available — add filters + press <strong>Search</strong> to
-              narrow down.
+              Default shows everything available — add filters + press <strong>Search</strong> to narrow down.
             </p>
           )}
 
@@ -700,10 +663,7 @@ export default function HomePage() {
               const displayName = formatHelperName(rawName);
 
               return (
-                <div
-                  key={helper?._id || helper?.id || rawName}
-                  style={styles.helperCard}
-                >
+                <div key={helper?._id || helper?.id || rawName} style={styles.helperCard}>
                   <strong>{displayName}</strong>
                   <div style={{ color: "#555", marginTop: 2 }}>
                     {profile.city || "Location not specified"}
@@ -718,13 +678,7 @@ export default function HomePage() {
                       <strong>Available:</strong>
                       <ul style={{ paddingLeft: 18, margin: "4px 0" }}>
                         {slots.map((slot) => (
-                          <li
-                            key={
-                              slot?._id ||
-                              slot?.id ||
-                              `${slot?.startTime}-${slot?.endTime}-${slot?.date}`
-                            }
-                          >
+                          <li key={slot?._id || slot?.id || `${slot?.startTime}-${slot?.endTime}`}>
                             {slot?.startTime}–{slot?.endTime}
                             {slot?.rawServices ? ` (${slot.rawServices})` : ""}
                             {extractRate(slot) !== null ? ` — $${extractRate(slot)}/hr` : ""}
@@ -740,24 +694,7 @@ export default function HomePage() {
                       ...styles.contactBtn,
                       opacity: isLoggedIn ? 1 : 0.85,
                     }}
-                    onClick={() => {
-                      if (!isLoggedIn) {
-                        navigate("/login");
-                        return;
-                      }
-
-                      const helperKey =
-                        profile?.displayName ||
-                        helper?.name ||
-                        profile?.email ||
-                        helper?.email ||
-                        "Helper";
-
-                      // fallback so refresh still works
-                      localStorage.setItem("tfh_start_chat", helperKey);
-
-                      navigate("/messages", { state: { selectedHelper: helperKey } });
-                    }}
+                    onClick={() => onContact(helper)}
                   >
                     {isLoggedIn ? "Contact" : "Log in to contact"}
                   </button>
@@ -799,7 +736,7 @@ const styles = {
     borderRadius: 10,
     border: "1px solid #e0e4ee",
     boxSizing: "border-box",
-    minHeight: "calc(100vh - 120px)", // keeps calendar tall
+    minHeight: "calc(100vh - 120px)",
     display: "flex",
     flexDirection: "column",
   },
@@ -952,17 +889,6 @@ const styles = {
     borderRadius: 999,
     padding: "2px 8px",
     fontWeight: 800,
-  },
-  myAvailBadge: {
-    display: "inline-block",
-    marginTop: 6,
-    fontSize: 11,
-    color: "#0b3a66",
-    background: "#dbeeff",
-    borderRadius: 999,
-    padding: "2px 8px",
-    fontWeight: 900,
-    border: "1px solid #4b9bff",
   },
 
   helperCard: {

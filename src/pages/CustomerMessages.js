@@ -1,123 +1,115 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
 import { getMessages, saveMessages } from "../utils/messageStore";
 
 function CustomerMessages() {
   const location = useLocation();
-  const [threads, setThreads] = useState(getMessages());
 
-  // Pick first thread safely (or null)
-  const firstKey = Object.keys(getMessages() || {})[0] || null;
-  const [activeHelper, setActiveHelper] = useState(firstKey);
+  const [threads, setThreads] = useState(() => getMessages() || {});
+  const [activeHelper, setActiveHelper] = useState(() => Object.keys(getMessages() || {})[0] || "");
   const [newMessage, setNewMessage] = useState("");
 
-  // ✅ Open from HomePage click (navigate state)
-  useEffect(() => {
-    if (location.state?.selectedHelper) {
-      setActiveHelper(location.state.selectedHelper);
+  const activeHelperName = useMemo(() => {
+    // If we arrived from HomePage, show the nicer display name if provided
+    if (location.state?.selectedHelperName && location.state?.selectedHelper) {
+      if (activeHelper === location.state.selectedHelper) return location.state.selectedHelperName;
     }
+    return activeHelper || "Helper";
+  }, [activeHelper, location.state]);
+
+  // If user navigates here via Contact button, select/create thread
+  useEffect(() => {
+    const selected = location.state?.selectedHelper;
+    if (!selected) return;
+
+    setThreads((prev) => {
+      const next = { ...(prev || {}) };
+      if (!next[selected]) next[selected] = [];
+      saveMessages(next);
+      return next;
+    });
+
+    setActiveHelper(selected);
   }, [location.state]);
-
-  // ✅ Fallback: if user refreshes /messages, we still open the intended helper
-  useEffect(() => {
-    if (location.state?.selectedHelper) return;
-
-    const saved = localStorage.getItem("tfh_start_chat");
-    if (saved) {
-      setActiveHelper(saved);
-      localStorage.removeItem("tfh_start_chat");
-    }
-  }, [location.state]);
-
-  // ✅ Ensure thread array exists before rendering/sending
-  useEffect(() => {
-    if (!activeHelper) return;
-
-    if (!threads[activeHelper]) {
-      const updated = { ...threads, [activeHelper]: [] };
-      setThreads(updated);
-      saveMessages(updated);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeHelper]);
 
   function sendMessage() {
-    if (!activeHelper) return;
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !activeHelper) return;
 
     const updated = {
-      ...threads,
+      ...(threads || {}),
       [activeHelper]: [
-        ...(threads[activeHelper] || []),
-        { sender: "you", text: newMessage },
+        ...((threads && threads[activeHelper]) || []),
+        { sender: "you", text: newMessage.trim() },
       ],
     };
 
     setThreads(updated);
     saveMessages(updated);
 
-    // ✅ increment notification counter
+    // increment notification counter
     const current = Number(localStorage.getItem("tfh_notify") || 0);
     localStorage.setItem("tfh_notify", current + 1);
 
     setNewMessage("");
   }
 
-  // ✅ reset notification when opening messages
+  // reset notification when opening messages
   useEffect(() => {
     localStorage.setItem("tfh_notify", 0);
   }, []);
 
-  const helperList = Object.keys(threads || {});
-  const safeActive = activeHelper || helperList[0] || "No conversations yet";
-  const activeMsgs = threads?.[safeActive] || [];
+  const helperKeys = Object.keys(threads || {});
+  const conversation = (threads && threads[activeHelper]) || [];
 
   return (
     <DashboardLayout>
       <h1>Messages</h1>
 
-      <div style={{ display: "flex", marginTop: "20px", maxWidth: "900px" }}>
-        <div style={{ width: "220px", borderRight: "1px solid #ccc" }}>
-          {helperList.length === 0 && (
-            <div style={{ padding: "10px", color: "#666" }}>
-              No conversations yet.
-            </div>
+      <div style={{ display: "flex", marginTop: 20, maxWidth: 900 }}>
+        <div style={{ width: 220, borderRight: "1px solid #ccc" }}>
+          {helperKeys.length === 0 && (
+            <div style={{ padding: 10, color: "#555" }}>No conversations yet.</div>
           )}
 
-          {helperList.map((helper) => (
+          {helperKeys.map((helperKey) => (
             <div
-              key={helper}
-              onClick={() => setActiveHelper(helper)}
+              key={helperKey}
+              onClick={() => setActiveHelper(helperKey)}
               style={{
-                padding: "10px",
+                padding: 10,
                 cursor: "pointer",
-                background: safeActive === helper ? "#003f63" : "transparent",
-                color: safeActive === helper ? "white" : "black",
-                borderRadius: "5px",
-                marginBottom: "5px",
+                background: activeHelper === helperKey ? "#003f63" : "transparent",
+                color: activeHelper === helperKey ? "white" : "black",
+                borderRadius: 5,
+                marginBottom: 5,
+                wordBreak: "break-word",
               }}
             >
-              {helper}
+              {helperKey}
             </div>
           ))}
         </div>
 
-        <div style={{ flex: 1, paddingLeft: "20px" }}>
-          <h3>Conversation with {safeActive}</h3>
+        <div style={{ flex: 1, paddingLeft: 20 }}>
+          <h3 style={{ marginTop: 0 }}>
+            Conversation with {activeHelperName}
+          </h3>
 
           <div
             style={{
               border: "1px solid #ccc",
-              padding: "15px",
-              minHeight: "260px",
-              marginBottom: "10px",
+              padding: 15,
+              minHeight: 260,
+              marginBottom: 10,
+              background: "#fff",
+              borderRadius: 8,
             }}
           >
-            {activeMsgs.length === 0 ? (
+            {conversation.length === 0 ? (
               <p style={{ color: "#666" }}>No messages yet. Say hello 👋</p>
             ) : (
-              activeMsgs.map((msg, index) => (
+              conversation.map((msg, index) => (
                 <p key={index}>
                   <strong>{msg.sender === "you" ? "You" : "Helper"}:</strong>{" "}
                   {msg.text}
@@ -131,10 +123,13 @@ function CustomerMessages() {
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="Type your message..."
-              style={{ flex: 1, padding: "8px" }}
-              disabled={!activeHelper && helperList.length === 0}
+              style={{ flex: 1, padding: 8 }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") sendMessage();
+              }}
+              disabled={!activeHelper}
             />
-            <button onClick={sendMessage} style={sendBtn} disabled={!activeHelper && helperList.length === 0}>
+            <button onClick={sendMessage} style={sendBtn} disabled={!activeHelper}>
               Send
             </button>
           </div>
@@ -145,13 +140,14 @@ function CustomerMessages() {
 }
 
 const sendBtn = {
-  marginLeft: "10px",
+  marginLeft: 10,
   padding: "8px 16px",
   background: "#003f63",
   color: "white",
   border: "none",
-  borderRadius: "4px",
+  borderRadius: 4,
   cursor: "pointer",
+  fontWeight: 800,
 };
 
 export default CustomerMessages;
