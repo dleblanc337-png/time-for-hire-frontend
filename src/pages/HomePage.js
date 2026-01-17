@@ -1,9 +1,10 @@
+// src/pages/HomePage.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { suggestServices } from "../data/serviceKeywords";
 
 /**
- * HomePage.js (full file)
+ * HomePage.js (FULL WORKING FILE) — MASTER
  * - Predictive dropdown suggestions (same dataset as Profile via suggestServices)
  * - TODAY highlight is steady yellow
  * - Selected date is obvious blue fill
@@ -11,6 +12,9 @@ import { suggestServices } from "../data/serviceKeywords";
  * - Calendar badges react to filters (keyword + price)
  * - Default view shows everything available (no filters)
  * - Render-safe: no ../utils/api import
+ * - Availability shows on calendar even if backend fetch fails (localStorage fallback)
+ * - “You are available” badge on dates you (logged-in user) posted availability (localStorage-based)
+ * - Contact button opens /messages with selectedHelper, gated behind login
  */
 
 // ---------- helpers ----------
@@ -96,7 +100,6 @@ function formatHelperName(name) {
 }
 
 function extractRate(slot) {
-  // Try common shapes safely
   const r = Number(
     slot?.hourlyRate ??
       slot?.rate ??
@@ -127,33 +130,14 @@ function termMatchesSlotAndProfile({ term, helperProfile, slotsText }) {
 
 // ---------- component ----------
 export default function HomePage() {
+  const navigate = useNavigate();
+
   const API_BASE =
     process.env.REACT_APP_API_URL ||
     process.env.REACT_APP_BACKEND_URL ||
     ""; // if empty, uses same-origin
 
   const todayStr = useMemo(() => formatDate(new Date()), []);
-const myAvailDates = useMemo(() => {
-  if (!isLoggedIn) return new Set();
-  const set = new Set();
-
-  helpers.forEach((h) => {
-    const helperEmail = String(h?.email || h?.profile?.email || "").toLowerCase().trim();
-    const helperId = h?._id || h?.id || null;
-
-    const isMe =
-      (myEmail && helperEmail && myEmail === helperEmail) ||
-      (myId && helperId && String(myId) === String(helperId));
-
-    if (!isMe) return;
-
-    safeArr(h?.availabilitySlots).forEach((s) => {
-      if (s?.date) set.add(s.date);
-    });
-  });
-
-  return set;
-}, [helpers, isLoggedIn, myEmail, myId]);
 
   // Mode tab
   const [mode, setMode] = useState("looking"); // "looking" or "offering"
@@ -184,18 +168,6 @@ const myAvailDates = useMemo(() => {
   const [loadingHelpers, setLoadingHelpers] = useState(false);
 
   const isLoggedIn = Boolean(localStorage.getItem("token"));
-const navigate = useNavigate();
-
-const me = useMemo(() => {
-  try {
-    return JSON.parse(localStorage.getItem("user") || "null");
-  } catch {
-    return null;
-  }
-}, []);
-
-const myEmail = (me?.email || "").toLowerCase().trim();
-const myId = me?._id || me?.id || null;
 
   // Dropdown behavior
   const [showDropdown, setShowDropdown] = useState(false);
@@ -240,93 +212,122 @@ const myId = me?._id || me?.id || null;
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [showDropdown]);
 
-    // Load helpers (public) — reusable + refreshable
-useEffect(() => {
-  let alive = true;
+  // Load helpers (public) — reusable + refreshable + local fallback
+  useEffect(() => {
+    let alive = true;
 
-  async function load() {
-    setLoadingHelpers(true);
+    async function load() {
+      setLoadingHelpers(true);
 
-    // Always read local helpers first (works even if backend fails)
-    const localHelpers = (() => {
-      try {
-        return JSON.parse(localStorage.getItem("tfh_helpers") || "[]");
-      } catch {
-        return [];
-      }
-    })();
-
-    const normalizedLocal = localHelpers.map((h) => ({
-      _id: h.id || h.email,
-      email: h.email,
-      profile: h.profile || {},
-      availabilitySlots: Array.isArray(h.availabilitySlots) ? h.availabilitySlots : [],
-    }));
-
-    try {
-      const url = joinUrl(API_BASE, "/api/helpers/public");
-      const data = await fetchJson(url);
-      if (!alive) return;
-
-      const merged = [...(Array.isArray(data) ? data : [])];
-
-      // Merge local availability on top of backend helpers
-      normalizedLocal.forEach((lh) => {
-        const idx = merged.findIndex(
-          (bh) => bh?._id === lh._id || bh?.email === lh.email || bh?.email === lh._id
-        );
-
-        if (idx >= 0) {
-          merged[idx] = {
-            ...merged[idx],
-            availabilitySlots: lh.availabilitySlots, // local wins
-            profile: { ...merged[idx].profile, ...lh.profile },
-          };
-        } else {
-          merged.push(lh);
+      // Always read local first (so Home still works even if backend call fails)
+      const localHelpers = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("tfh_helpers") || "[]");
+        } catch {
+          return [];
         }
-      });
+      })();
 
-      setHelpers(merged);
-    } catch (err) {
-      console.error("HomePage: failed to load public helpers:", err);
-      if (!alive) return;
+      const normalizedLocal = localHelpers.map((h) => ({
+        _id: h.id || h.email,
+        id: h.id,
+        email: h.email,
+        profile: h.profile || {},
+        availabilitySlots: Array.isArray(h.availabilitySlots) ? h.availabilitySlots : [],
+      }));
 
-      // Fallback: still show local helpers
-      setHelpers(normalizedLocal);
-    } finally {
-      if (alive) setLoadingHelpers(false);
+      try {
+        const url = joinUrl(API_BASE, "/api/helpers/public");
+        const data = await fetchJson(url);
+        if (!alive) return;
+
+        const merged = [...(Array.isArray(data) ? data : [])];
+
+        // Merge local availability on top of backend helpers
+        normalizedLocal.forEach((lh) => {
+          const idx = merged.findIndex((bh) => {
+            const bhId = bh?._id || bh?.id || null;
+            const bhEmail = String(bh?.email || bh?.profile?.email || "").toLowerCase().trim();
+            const lhEmail = String(lh?.email || lh?.profile?.email || "").toLowerCase().trim();
+
+            if (bhId && lh._id && String(bhId) === String(lh._id)) return true;
+            if (bhEmail && lhEmail && bhEmail === lhEmail) return true;
+            return false;
+          });
+
+          if (idx >= 0) {
+            merged[idx] = {
+              ...merged[idx],
+              availabilitySlots: lh.availabilitySlots, // local wins (newest)
+              profile: { ...merged[idx]?.profile, ...lh.profile },
+              email: merged[idx]?.email || lh.email,
+            };
+          } else {
+            merged.push(lh);
+          }
+        });
+
+        setHelpers(merged);
+      } catch (err) {
+        console.error("HomePage: failed to load public helpers:", err);
+        if (!alive) return;
+
+        // Fallback: still show local helpers
+        setHelpers(normalizedLocal);
+      } finally {
+        if (alive) setLoadingHelpers(false);
+      }
     }
-  }
 
-  // initial load
-  load();
-
-  // refresh when coming back to the tab (very common after posting availability)
-  function onFocus() {
+    // initial load
     load();
-  }
-  window.addEventListener("focus", onFocus);
 
-  // refresh when helper availability page sets a flag
-  function onStorage(e) {
-    if (e.key === "tfh_refresh_home") load();
-  }
-  window.addEventListener("storage", onStorage);
+    // refresh when coming back to the tab
+    function onFocus() {
+      load();
+    }
+    window.addEventListener("focus", onFocus);
 
-  // also refresh immediately if flag already exists (same-tab navigation)
-  const flag = localStorage.getItem("tfh_refresh_home");
-  if (flag) {
-    localStorage.removeItem("tfh_refresh_home");
-    load();
-  }
+    // refresh when helper availability page sets a flag
+    function onStorage(e) {
+      if (e.key === "tfh_refresh_home") load();
+    }
+    window.addEventListener("storage", onStorage);
 
-  return () => {
-    alive = false;
-    window.removeEventListener("focus", onFocus);
-    window.removeEventListener("storage", onStorage);
-  };
-}, [API_BASE]);
+    // also refresh immediately if flag already exists (same-tab navigation)
+    const flag = localStorage.getItem("tfh_refresh_home");
+    if (flag) {
+      localStorage.removeItem("tfh_refresh_home");
+      load();
+    }
+
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [API_BASE]);
+
+  // “You are available” dates (localStorage-based, logged-in only)
+  const myAvailDates = useMemo(() => {
+    if (!isLoggedIn) return new Set();
+
+    let localHelpers = [];
+    try {
+      localHelpers = JSON.parse(localStorage.getItem("tfh_helpers") || "[]");
+    } catch {
+      localHelpers = [];
+    }
+
+    const set = new Set();
+    localHelpers.forEach((h) => {
+      safeArr(h?.availabilitySlots).forEach((s) => {
+        if (s?.date) set.add(s.date);
+      });
+    });
+
+    return set;
+  }, [isLoggedIn]);
 
   // Build calendar grid
   const monthDays = useMemo(() => {
@@ -374,9 +375,7 @@ useEffect(() => {
     setApplied({ term: "", radius: "any", maxPrice: "any" });
   }
 
-  // Filter logic:
-  // - Calendar badges: count slots by day for helpers/slots matching applied filters (term + maxPrice)
-  // - Right column list: only helpers who have at least one matching slot on selectedDate
+  // Calendar badges: count slots by day for helpers/slots matching applied filters (term + maxPrice)
   const helperCountByDate = useMemo(() => {
     const map = {};
     if (mode !== "looking") return map;
@@ -387,12 +386,10 @@ useEffect(() => {
       const profile = h?.profile || {};
       const slots = safeArr(h?.availabilitySlots);
 
-      // Build a quick slot text once (for keyword match)
       const slotsText = slots
         .map((s) => `${s?.rawServices || ""} ${s?.services || ""}`)
         .join(" ");
 
-      // If keyword filter exists, helper must match somewhere
       const helperTermOk = termMatchesSlotAndProfile({
         term: appliedTerm,
         helperProfile: profile,
@@ -403,7 +400,6 @@ useEffect(() => {
       slots.forEach((slot) => {
         if (!slot?.date) return;
 
-        // Price filter (if missing price, allow)
         if (max !== null) {
           const r = extractRate(slot);
           if (r !== null && r > max) return;
@@ -432,7 +428,6 @@ useEffect(() => {
         .map((s) => `${s?.rawServices || ""} ${s?.services || ""}`)
         .join(" ");
 
-      // Keyword filter
       const helperTermOk = termMatchesSlotAndProfile({
         term: appliedTerm,
         helperProfile: profile,
@@ -440,7 +435,6 @@ useEffect(() => {
       });
       if (!helperTermOk) return false;
 
-      // Price filter (slot-based on selected date; if missing, allow)
       if (max !== null) {
         const ok = slotsOnDate.some((s) => {
           const r = extractRate(s);
@@ -455,17 +449,15 @@ useEffect(() => {
     });
   }, [helpers, mode, selectedDate, appliedTerm, applied.maxPrice]);
 
-  // Render helpers’ slots for the selected date
   function slotsForDate(helper) {
     return safeArr(helper?.availabilitySlots).filter((s) => s?.date === selectedDate);
   }
 
-  // Improve selected date visibility by syncing viewMonth when selectedDate changes (nice UX)
+  // Sync month view when selectedDate changes
   useEffect(() => {
     const d = parseDateStr(selectedDate);
     if (!d) return;
     const newMonth = new Date(d.getFullYear(), d.getMonth(), 1);
-    // only change if different month
     if (
       newMonth.getFullYear() !== viewMonth.getFullYear() ||
       newMonth.getMonth() !== viewMonth.getMonth()
@@ -482,28 +474,12 @@ useEffect(() => {
         <div style={styles.panelLeft}>
           <div style={styles.toggleWrap}>
             <button
-              onClick={() => {
-  if (!isLoggedIn) {
-    navigate("/login");
-    return;
-  }
-
-  const helperId = helper?._id || helper?.id || null;
-  const helperEmail = helper?.email || profile?.email || "";
-  const helperName = displayName;
-
-  localStorage.setItem(
-    "tfh_start_chat",
-    JSON.stringify({
-      helperId,
-      helperEmail,
-      helperName,
-      ts: Date.now(),
-    })
-  );
-
-  navigate("/messages");
-}}
+              onClick={() => setMode("looking")}
+              style={{
+                ...styles.toggleBtn,
+                background: mode === "looking" ? "#003f63" : "#fff",
+                color: mode === "looking" ? "#fff" : "#003f63",
+              }}
             >
               I am looking for
             </button>
@@ -520,7 +496,10 @@ useEffect(() => {
           </div>
 
           {/* Search input + dropdown */}
-          <div style={{ marginBottom: 12, position: "relative", zIndex: 9999 }} ref={inputWrapRef}>
+          <div
+            style={{ marginBottom: 12, position: "relative", zIndex: 9999 }}
+            ref={inputWrapRef}
+          >
             <label style={styles.label}>Search</label>
             <input
               value={searchTerm}
@@ -601,9 +580,9 @@ useEffect(() => {
           </div>
 
           <div style={styles.tipBox}>
-            Default: shows everything available. Add filters + press <strong>Search</strong> to narrow down.
+            Default: shows everything available. Add filters + press <strong>Search</strong> to narrow
+            down.
           </div>
-
         </div>
 
         {/* CENTER CALENDAR */}
@@ -639,22 +618,17 @@ useEffect(() => {
                       const isSelected = dateStr === selectedDate; // clicked
 
                       const helpersCount = helperCountByDate[dateStr] || 0;
-{isLoggedIn && myAvailDates.has(dateStr) && (
-  <div style={styles.myAvailBadge}>You are available</div>
-)}
 
                       let bg = inMonth ? "#fff" : "#f7f8fb";
                       let border = "1px solid #e2e6ef";
                       let color = inMonth ? "#222" : "#8a93a3";
 
-                      // TODAY yellow (steady)
                       if (isToday) {
                         bg = "#fff5b5";
                         border = "2px solid #f2c200";
                         color = "#222";
                       }
 
-                      // Selected date blue should still be obvious
                       if (isSelected) {
                         bg = "#dbeeff";
                         border = "2px solid #4b9bff";
@@ -679,6 +653,10 @@ useEffect(() => {
                           {helpersCount > 0 && (
                             <div style={styles.availBadge}>{helpersCount} avail</div>
                           )}
+
+                          {isLoggedIn && myAvailDates.has(dateStr) && (
+                            <div style={styles.myAvailBadge}>You are available</div>
+                          )}
                         </td>
                       );
                     })}
@@ -688,9 +666,7 @@ useEffect(() => {
             </table>
 
             {loadingHelpers && (
-              <div style={{ marginTop: 10, fontSize: 13, color: "#444" }}>
-                Loading helpers…
-              </div>
+              <div style={{ marginTop: 10, fontSize: 13, color: "#444" }}>Loading helpers…</div>
             )}
           </div>
         </div>
@@ -701,7 +677,8 @@ useEffect(() => {
 
           {mode === "offering" && (
             <p style={{ fontSize: 13 }}>
-              Helper view: switch to <strong>&quot;I am looking for&quot;</strong> to search helpers as a customer.
+              Helper view: switch to <strong>&quot;I am looking for&quot;</strong> to search helpers
+              as a customer.
             </p>
           )}
 
@@ -709,7 +686,8 @@ useEffect(() => {
             <p style={{ fontSize: 13 }}>
               No helpers found for this selection.
               <br />
-              Default shows everything available — add filters + press <strong>Search</strong> to narrow down.
+              Default shows everything available — add filters + press <strong>Search</strong> to
+              narrow down.
             </p>
           )}
 
@@ -722,7 +700,10 @@ useEffect(() => {
               const displayName = formatHelperName(rawName);
 
               return (
-                <div key={helper?._id || helper?.id || rawName} style={styles.helperCard}>
+                <div
+                  key={helper?._id || helper?.id || rawName}
+                  style={styles.helperCard}
+                >
                   <strong>{displayName}</strong>
                   <div style={{ color: "#555", marginTop: 2 }}>
                     {profile.city || "Location not specified"}
@@ -737,7 +718,13 @@ useEffect(() => {
                       <strong>Available:</strong>
                       <ul style={{ paddingLeft: 18, margin: "4px 0" }}>
                         {slots.map((slot) => (
-                          <li key={slot?._id || slot?.id || `${slot?.startTime}-${slot?.endTime}`}>
+                          <li
+                            key={
+                              slot?._id ||
+                              slot?.id ||
+                              `${slot?.startTime}-${slot?.endTime}-${slot?.date}`
+                            }
+                          >
                             {slot?.startTime}–{slot?.endTime}
                             {slot?.rawServices ? ` (${slot.rawServices})` : ""}
                             {extractRate(slot) !== null ? ` — $${extractRate(slot)}/hr` : ""}
@@ -747,25 +734,33 @@ useEffect(() => {
                     </div>
                   )}
 
-                  {/* Placeholder for “contact” – we’ll wire this to Messages next */}
                   <button
-  type="button"
-  style={{
-    ...styles.contactBtn,
-    opacity: isLoggedIn ? 1 : 0.85,
-  }}
-  onClick={() => {
-    if (!isLoggedIn) {
-      window.location.href = "/login";
-      return;
-    }
+                    type="button"
+                    style={{
+                      ...styles.contactBtn,
+                      opacity: isLoggedIn ? 1 : 0.85,
+                    }}
+                    onClick={() => {
+                      if (!isLoggedIn) {
+                        navigate("/login");
+                        return;
+                      }
 
-    alert("Next step: wire this button to Messages (thread with this helper).");
-  }}
->
-  {isLoggedIn ? "Contact" : "Log in to contact"}
-</button>
+                      const helperKey =
+                        profile?.displayName ||
+                        helper?.name ||
+                        profile?.email ||
+                        helper?.email ||
+                        "Helper";
 
+                      // fallback so refresh still works
+                      localStorage.setItem("tfh_start_chat", helperKey);
+
+                      navigate("/messages", { state: { selectedHelper: helperKey } });
+                    }}
+                  >
+                    {isLoggedIn ? "Contact" : "Log in to contact"}
+                  </button>
                 </div>
               );
             })}
@@ -920,17 +915,6 @@ const styles = {
     padding: "6px 10px",
     fontWeight: 900,
   },
-myAvailBadge: {
-  display: "inline-block",
-  marginTop: 6,
-  fontSize: 11,
-  color: "#0b3a66",
-  background: "#dbeeff",
-  borderRadius: 999,
-  padding: "2px 8px",
-  fontWeight: 900,
-  border: "1px solid #4b9bff",
-},
 
   calendarWrap: {
     flex: 1,
@@ -968,6 +952,17 @@ myAvailBadge: {
     borderRadius: 999,
     padding: "2px 8px",
     fontWeight: 800,
+  },
+  myAvailBadge: {
+    display: "inline-block",
+    marginTop: 6,
+    fontSize: 11,
+    color: "#0b3a66",
+    background: "#dbeeff",
+    borderRadius: 999,
+    padding: "2px 8px",
+    fontWeight: 900,
+    border: "1px solid #4b9bff",
   },
 
   helperCard: {
