@@ -1,14 +1,15 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { suggestServices } from "../data/serviceKeywords";
 
 /**
- * HomePage.js
- * - TODAY highlight steady (yellow) always
- * - Selected date highlight (blue border) follows clicks immediately
- * - Predictive dropdown same behavior as Profile.js via suggestServices()
- * - Search (Apply) + Reset filters
- * - Calendar "avail" badges react to applied filters (keyword + max price)
- * - Better vertical fill: larger calendar cells + compact filter summary
+ * HomePage.js (full file)
+ * - Predictive dropdown suggestions (same dataset as Profile via suggestServices)
+ * - TODAY highlight is steady yellow
+ * - Selected date is obvious blue fill
+ * - Search + Reset (filters apply only after clicking Search)
+ * - Calendar badges react to filters (keyword + price)
+ * - Default view shows everything available (no filters)
+ * - Render-safe: no ../utils/api import
  */
 
 // ---------- helpers ----------
@@ -37,6 +38,12 @@ function formatDate(d) {
   const mm = pad2(d.getMonth() + 1);
   const dd = pad2(d.getDate());
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function parseDateStr(dateStr) {
+  const [y, m, d] = String(dateStr || "").split("-").map((x) => Number(x));
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
 }
 
 function addDays(date, n) {
@@ -88,6 +95,7 @@ function formatHelperName(name) {
 }
 
 function extractRate(slot) {
+  // Try common shapes safely
   const r = Number(
     slot?.hourlyRate ??
       slot?.rate ??
@@ -99,81 +107,147 @@ function extractRate(slot) {
   return Number.isFinite(r) ? r : null;
 }
 
-function helperHasKeywordMatch(helper, keyword) {
-  const term = normalizeTerm(keyword);
+function termMatchesSlotAndProfile({ term, helperProfile, slotsText }) {
   if (!term) return true;
 
-  const profile = helper?.profile || {};
-  const tags = safeArr(profile.serviceTags).map((t) => String(t || "").toLowerCase());
-  const servicesText = String(profile.services || "").toLowerCase();
+  const servicesText = String(helperProfile?.services || "").toLowerCase();
+  const tags = safeArr(helperProfile?.serviceTags)
+    .map((t) => String(t || "").toLowerCase())
+    .filter(Boolean);
 
-  const slotText = safeArr(helper?.availabilitySlots)
-    .map((s) => `${s?.rawServices || ""} ${s?.services || ""}`)
-    .join(" ")
-    .toLowerCase();
+  const slotText = String(slotsText || "").toLowerCase();
 
-  return (
-    tags.some((t) => t.includes(term)) ||
-    servicesText.includes(term) ||
-    slotText.includes(term)
-  );
+  const hitServices = servicesText.includes(term);
+  const hitTags = tags.some((t) => t.includes(term));
+  const hitSlots = slotText.includes(term);
+
+  return hitServices || hitTags || hitSlots;
 }
 
 // ---------- component ----------
 export default function HomePage() {
+  const API_BASE =
+    process.env.REACT_APP_API_URL ||
+    process.env.REACT_APP_BACKEND_URL ||
+    ""; // if empty, uses same-origin
+
   const todayStr = useMemo(() => formatDate(new Date()), []);
 
-  const [mode, setMode] = useState("looking"); // "looking" | "offering"
+  // Mode tab
+  const [mode, setMode] = useState("looking"); // "looking" or "offering"
 
-  // Applied filters (drive calendar + results)
+  // Draft inputs (user typing)
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [radius, setRadius] = useState("any"); // placeholder
+  const [radius, setRadius] = useState("any");
   const [maxPrice, setMaxPrice] = useState("any");
 
-  // Draft filters (what user types before Search)
-  const [draftSearch, setDraftSearch] = useState("");
-  const [draftSelectedDate, setDraftSelectedDate] = useState(todayStr);
-  const [draftRadius, setDraftRadius] = useState("any");
-  const [draftMaxPrice, setDraftMaxPrice] = useState("any");
+  // Applied filters (only change on Search / Reset)
+  const [applied, setApplied] = useState({
+    term: "",
+    radius: "any",
+    maxPrice: "any",
+  });
 
-  const [helpers, setHelpers] = useState([]);
+  const appliedTerm = useMemo(() => normalizeTerm(applied.term), [applied.term]);
 
+  // Calendar month view
   const [viewMonth, setViewMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
 
-  // Load helpers/availability
+  // Data
+  const [helpers, setHelpers] = useState([]);
+  const [loadingHelpers, setLoadingHelpers] = useState(false);
+
+  // Dropdown behavior
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef(null);
+  const inputWrapRef = useRef(null);
+
+  // Predictive suggestions like Profile: use the last token after comma
+  const token = useMemo(() => {
+    const raw = String(searchTerm || "");
+    const t = raw.split(",").pop()?.trim() || "";
+    return t;
+  }, [searchTerm]);
+
+  const suggestions = useMemo(() => {
+    if (!token) return [];
+    return safeArr(suggestServices(token)).slice(0, 12);
+  }, [token]);
+
+  function applySuggestion(s) {
+    const current = String(searchTerm || "");
+    const parts = current.split(",");
+    parts[parts.length - 1] = s;
+
+    const next = parts
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+      .join(", ");
+
+    setSearchTerm(next ? `${next}, ` : "");
+    setShowDropdown(false);
+  }
+
+  // Close dropdown on outside click
   useEffect(() => {
+    function onDocClick(e) {
+      if (!showDropdown) return;
+      const inInput = inputWrapRef.current && inputWrapRef.current.contains(e.target);
+      const inDrop = dropdownRef.current && dropdownRef.current.contains(e.target);
+      if (!inInput && !inDrop) setShowDropdown(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [showDropdown]);
+
+  // Load helpers (public)
+  useEffect(() => {
+    let alive = true;
+
     async function load() {
+      setLoadingHelpers(true);
       try {
-        const base = process.env.REACT_APP_API_URL || "";
-        const url = joinUrl(base, "/api/helpers/public");
+        // This endpoint already exists in your file history
+        const url = joinUrl(API_BASE, "/api/helpers/public");
         const data = await fetchJson(url);
-        const arr = Array.isArray(data) ? data : data?.data || [];
-        setHelpers(arr);
-      } catch (e) {
-        console.error("HomePage: failed to load helpers", e);
+
+        if (!alive) return;
+        // Expect array of helpers
+        setHelpers(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("HomePage: failed to load public helpers:", err);
+        if (!alive) return;
         setHelpers([]);
+      } finally {
+        if (alive) setLoadingHelpers(false);
       }
     }
-    load();
-  }, []);
 
-  // Calendar grid
+    load();
+    return () => {
+      alive = false;
+    };
+  }, [API_BASE]);
+
+  // Build calendar grid
   const monthDays = useMemo(() => {
     const first = startOfMonth(viewMonth);
     const last = endOfMonth(viewMonth);
 
     const start = new Date(first);
-    start.setDate(first.getDate() - first.getDay()); // Sunday
+    start.setDate(first.getDate() - first.getDay()); // sunday
 
     const end = new Date(last);
-    end.setDate(last.getDate() + (6 - last.getDay())); // Saturday
+    end.setDate(last.getDate() + (6 - last.getDay())); // saturday
 
     const days = [];
-    for (let d = new Date(start); d <= end; d = addDays(d, 1)) days.push(new Date(d));
+    for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
+      days.push(new Date(d));
+    }
     return chunkWeeks(days);
   }, [viewMonth]);
 
@@ -181,98 +255,63 @@ export default function HomePage() {
     return viewMonth.toLocaleString("default", { month: "long", year: "numeric" });
   }, [viewMonth]);
 
-  // Dropdown suggestions like Profile (comma-separated token)
-  const serviceToken = (draftSearch || "").split(",").pop()?.trim() || "";
-  const serviceSuggestions = suggestServices(serviceToken);
-
-  function applyServiceSuggestion(suggestion) {
-    const current = draftSearch || "";
-    const parts = current.split(",");
-    parts[parts.length - 1] = suggestion;
-
-    const next = parts
-      .map((p) => p.trim())
-      .filter((p) => p.length > 0)
-      .join(", ");
-
-    setDraftSearch(next ? `${next}, ` : "");
+  function onPrevMonth() {
+    setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1));
   }
 
-  // Apply/Reset
-  function onApplyFilters() {
-    setSearchTerm(draftSearch);
-    setSelectedDate(draftSelectedDate);
-    setRadius(draftRadius);
-    setMaxPrice(draftMaxPrice);
+  function onNextMonth() {
+    setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1));
+  }
+
+  // Search / Reset
+  function onSearchApply() {
+    setApplied({
+      term: searchTerm,
+      radius,
+      maxPrice,
+    });
   }
 
   function onResetFilters() {
-    setDraftSearch("");
-    setDraftSelectedDate(todayStr);
-    setDraftRadius("any");
-    setDraftMaxPrice("any");
-
     setSearchTerm("");
-    setSelectedDate(todayStr);
     setRadius("any");
     setMaxPrice("any");
+    setApplied({ term: "", radius: "any", maxPrice: "any" });
   }
 
-  // When clicking calendar: date should immediately follow (no Search required)
-  function onPickDate(dateStr) {
-    setDraftSelectedDate(dateStr);
-    setSelectedDate(dateStr); // <-- immediate apply for date only
-  }
-
-  const normalizedAppliedTerm = useMemo(() => normalizeTerm(searchTerm), [searchTerm]);
-
-  // Right column helpers filtered
-  function helperMatches(helper) {
-    const slots = safeArr(helper?.availabilitySlots);
-
-    const hasDate = slots.some((s) => s?.date === selectedDate);
-    if (!hasDate) return false;
-
-    if (normalizedAppliedTerm && !helperHasKeywordMatch(helper, normalizedAppliedTerm)) {
-      return false;
-    }
-
-    if (maxPrice !== "any") {
-      const max = Number(maxPrice);
-      const slotsOnDate = slots.filter((s) => s?.date === selectedDate);
-
-      const ok = slotsOnDate.some((s) => {
-        const r = extractRate(s);
-        if (r == null) return true; // don't hide if missing
-        return r <= max;
-      });
-
-      if (!ok) return false;
-    }
-
-    return true;
-  }
-
-  const filteredHelpers = useMemo(() => {
-    if (mode !== "looking") return [];
-    return helpers.filter((h) => helperMatches(h));
-  }, [helpers, mode, selectedDate, normalizedAppliedTerm, maxPrice, radius]);
-
-  // Calendar badge counts reactive to applied filters
+  // Filter logic:
+  // - Calendar badges: count slots by day for helpers/slots matching applied filters (term + maxPrice)
+  // - Right column list: only helpers who have at least one matching slot on selectedDate
   const helperCountByDate = useMemo(() => {
     const map = {};
     if (mode !== "looking") return map;
 
-    helpers.forEach((helper) => {
-      if (normalizedAppliedTerm && !helperHasKeywordMatch(helper, normalizedAppliedTerm)) return;
+    const max = applied.maxPrice === "any" ? null : Number(applied.maxPrice);
 
-      safeArr(helper?.availabilitySlots).forEach((slot) => {
+    helpers.forEach((h) => {
+      const profile = h?.profile || {};
+      const slots = safeArr(h?.availabilitySlots);
+
+      // Build a quick slot text once (for keyword match)
+      const slotsText = slots
+        .map((s) => `${s?.rawServices || ""} ${s?.services || ""}`)
+        .join(" ");
+
+      // If keyword filter exists, helper must match somewhere
+      const helperTermOk = termMatchesSlotAndProfile({
+        term: appliedTerm,
+        helperProfile: profile,
+        slotsText,
+      });
+      if (!helperTermOk) return;
+
+      slots.forEach((slot) => {
         if (!slot?.date) return;
 
-        if (maxPrice !== "any") {
-          const max = Number(maxPrice);
+        // Price filter (if missing price, allow)
+        if (max !== null) {
           const r = extractRate(slot);
-          if (r != null && r > max) return;
+          if (r !== null && r > max) return;
         }
 
         map[slot.date] = (map[slot.date] || 0) + 1;
@@ -280,13 +319,71 @@ export default function HomePage() {
     });
 
     return map;
-  }, [helpers, mode, normalizedAppliedTerm, maxPrice]);
+  }, [helpers, mode, appliedTerm, applied.maxPrice]);
 
-  // ---------- render ----------
+  const filteredHelpers = useMemo(() => {
+    if (mode !== "looking") return [];
+
+    const max = applied.maxPrice === "any" ? null : Number(applied.maxPrice);
+
+    return helpers.filter((h) => {
+      const profile = h?.profile || {};
+      const slots = safeArr(h?.availabilitySlots);
+
+      const slotsOnDate = slots.filter((s) => s?.date === selectedDate);
+      if (slotsOnDate.length === 0) return false;
+
+      const slotsText = slots
+        .map((s) => `${s?.rawServices || ""} ${s?.services || ""}`)
+        .join(" ");
+
+      // Keyword filter
+      const helperTermOk = termMatchesSlotAndProfile({
+        term: appliedTerm,
+        helperProfile: profile,
+        slotsText,
+      });
+      if (!helperTermOk) return false;
+
+      // Price filter (slot-based on selected date; if missing, allow)
+      if (max !== null) {
+        const ok = slotsOnDate.some((s) => {
+          const r = extractRate(s);
+          if (r === null) return true;
+          return r <= max;
+        });
+        if (!ok) return false;
+      }
+
+      // Radius placeholder (kept for later geo work)
+      return true;
+    });
+  }, [helpers, mode, selectedDate, appliedTerm, applied.maxPrice]);
+
+  // Render helpers’ slots for the selected date
+  function slotsForDate(helper) {
+    return safeArr(helper?.availabilitySlots).filter((s) => s?.date === selectedDate);
+  }
+
+  // Improve selected date visibility by syncing viewMonth when selectedDate changes (nice UX)
+  useEffect(() => {
+    const d = parseDateStr(selectedDate);
+    if (!d) return;
+    const newMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+    // only change if different month
+    if (
+      newMonth.getFullYear() !== viewMonth.getFullYear() ||
+      newMonth.getMonth() !== viewMonth.getMonth()
+    ) {
+      setViewMonth(newMonth);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
+
   return (
     <div style={styles.pageWrap}>
       <div style={styles.layoutWrap}>
-        {/* LEFT */}
+        {/* LEFT FILTERS */}
         <div style={styles.panelLeft}>
           <div style={styles.toggleWrap}>
             <button
@@ -311,192 +408,201 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* Search + suggestions */}
-          <div style={{ marginBottom: 12 }}>
+          {/* Search input + dropdown */}
+          <div style={{ marginBottom: 12, position: "relative", zIndex: 9999 }} ref={inputWrapRef}>
             <label style={styles.label}>Search</label>
+            <input
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                const last = e.target.value.split(",").pop()?.trim() || "";
+                setShowDropdown(last.length > 0);
+              }}
+              onFocus={() => {
+                if (token.length > 0) setShowDropdown(true);
+              }}
+              placeholder="carpenter, lawn, snow..."
+              style={styles.input}
+            />
 
-            <div style={{ position: "relative" }}>
-              <input
-                value={draftSearch}
-                onChange={(e) => setDraftSearch(e.target.value)}
-                style={styles.input}
-                placeholder="carpenter, lawn care, snow removal"
-                autoComplete="off"
-              />
-
-              {mode === "looking" && serviceSuggestions.length > 0 && serviceToken.length > 0 && (
-                <div style={styles.dropdown}>
-                  {serviceSuggestions.map((s) => (
-                    <div
-                      key={s}
-                      onClick={() => applyServiceSuggestion(s)}
-                      style={styles.dropdownItem}
-                    >
-                      {s}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            {showDropdown && suggestions.length > 0 && (
+              <div ref={dropdownRef} style={styles.dropdown}>
+                {suggestions.map((s) => (
+                  <div
+                    key={s}
+                    style={styles.dropdownItem}
+                    onClick={() => applySuggestion(s)}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f7fb")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                  >
+                    {s}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div style={{ marginBottom: 12 }}>
             <label style={styles.label}>Selected date</label>
             <input
               type="date"
-              value={draftSelectedDate}
-              onChange={(e) => {
-                setDraftSelectedDate(e.target.value);
-                setSelectedDate(e.target.value); // date follows immediately
-              }}
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
               style={styles.input}
             />
           </div>
 
           <div style={{ marginBottom: 12 }}>
             <label style={styles.label}>Distance radius</label>
-            <select value={draftRadius} onChange={(e) => setDraftRadius(e.target.value)} style={styles.input}>
+            <select value={radius} onChange={(e) => setRadius(e.target.value)} style={styles.input}>
               <option value="any">Any distance</option>
-              <option value="5">Within 5 km</option>
-              <option value="10">Within 10 km</option>
-              <option value="25">Within 25 km</option>
+              <option value="5">5 km</option>
+              <option value="10">10 km</option>
+              <option value="25">25 km</option>
+              <option value="50">50 km</option>
             </select>
           </div>
 
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 14 }}>
             <label style={styles.label}>Max price ($/hr)</label>
-            <select value={draftMaxPrice} onChange={(e) => setDraftMaxPrice(e.target.value)} style={styles.input}>
+            <select
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(e.target.value)}
+              style={styles.input}
+            >
               <option value="any">Any price</option>
-              <option value="20">$20/hr</option>
-              <option value="30">$30/hr</option>
-              <option value="40">$40/hr</option>
-              <option value="50">$50/hr</option>
+              <option value="20">20</option>
+              <option value="30">30</option>
+              <option value="40">40</option>
+              <option value="50">50</option>
+              <option value="75">75</option>
+              <option value="100">100</option>
             </select>
           </div>
 
-          {/* Buttons */}
-          <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
-            <button onClick={onApplyFilters} style={styles.primaryBtn}>
+          <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+            <button style={styles.primaryBtn} onClick={onSearchApply}>
               Search
             </button>
-            <button onClick={onResetFilters} style={styles.secondaryBtn}>
+            <button style={styles.ghostBtn} onClick={onResetFilters}>
               Reset
             </button>
           </div>
 
-          <div style={{ fontSize: 12, color: "#666", marginTop: 10 }}>
-            Default: shows everything available. Add filters + press <b>Search</b> to narrow down.
+          <div style={styles.tipBox}>
+            Default: shows everything available. Add filters + press <strong>Search</strong> to narrow down.
+          </div>
+
+          <div style={styles.activeBox}>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Active filters</div>
+            <div style={styles.activeLine}>
+              <strong>Date:</strong> {selectedDate}
+            </div>
+            <div style={styles.activeLine}>
+              <strong>Keywords:</strong> {applied.term?.trim() ? applied.term.trim() : "Any"}
+            </div>
+            <div style={styles.activeLine}>
+              <strong>Price:</strong> {applied.maxPrice === "any" ? "Any" : `≤ $${applied.maxPrice}/hr`}
+            </div>
+            <div style={styles.activeLine}>
+              <strong>Distance:</strong> {applied.radius === "any" ? "Any" : `${applied.radius} km`}
+            </div>
           </div>
         </div>
 
-        {/* CENTER */}
+        {/* CENTER CALENDAR */}
         <div style={styles.panelCenter}>
           <div style={styles.monthNav}>
-            <button
-              style={styles.navBtn}
-              onClick={() => {
-                const d = new Date(viewMonth);
-                d.setMonth(d.getMonth() - 1);
-                setViewMonth(d);
-              }}
-            >
+            <button style={styles.navBtn} onClick={onPrevMonth}>
               &lt;
             </button>
-
             <h2 style={{ margin: 0 }}>{monthLabel}</h2>
-
-            <button
-              style={styles.navBtn}
-              onClick={() => {
-                const d = new Date(viewMonth);
-                d.setMonth(d.getMonth() + 1);
-                setViewMonth(d);
-              }}
-            >
+            <button style={styles.navBtn} onClick={onNextMonth}>
               &gt;
             </button>
           </div>
 
-          {/* Compact summary (no big box taking space) */}
-          <div style={styles.filterLine}>
-            <span><b>Date:</b> {selectedDate}</span>
-            <span><b>Keywords:</b> {(searchTerm || "").trim() ? searchTerm : "Any"}</span>
-            <span><b>Max:</b> {maxPrice === "any" ? "Any" : `$${maxPrice}/hr`}</span>
-          </div>
-
-          <table style={styles.calendarTable}>
-            <thead>
-              <tr>
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                  <th key={d} style={styles.calendarTh}>
-                    {d}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {monthDays.map((week, wIdx) => (
-                <tr key={wIdx}>
-                  {week.map((dayDate) => {
-                    const day = dayDate.getDate();
-                    const dateStr = formatDate(dayDate);
-                    const inMonth = dayDate.getMonth() === viewMonth.getMonth();
-
-                    const isToday = dateStr === todayStr;       // steady yellow
-                    const isSelected = dateStr === selectedDate; // blue border follows
-
-                    const helpersCount = helperCountByDate[dateStr] || 0;
-
-                    // Base styles
-                    let bg = inMonth ? "#fff" : "#f9fafb";
-                    let borderColor = "#ddd";
-                    let borderWidth = 1;
-
-                    // TODAY: always yellow background
-                    if (isToday) {
-                      bg = "#fff5b5";
-                      borderColor = "#f2c200";
-                      borderWidth = 2;
-                    }
-
-                    // SELECTED: blue border (does not remove today yellow)
-                    if (isSelected) {
-                      borderColor = "#67a9ff";
-                      borderWidth = 2;
-                    }
-
-                    return (
-                      <td
-                        key={dateStr}
-                        onClick={() => onPickDate(dateStr)}
-                        style={{
-                          ...styles.calendarTd,
-                          background: bg,
-                          border: `${borderWidth}px solid ${borderColor}`,
-                        }}
-                      >
-                        <div style={{ textAlign: "right" }}>{day}</div>
-
-                        {helpersCount > 0 && (
-                          <div style={styles.availBadge}>{helpersCount} avail</div>
-                        )}
-                      </td>
-                    );
-                  })}
+          <div style={styles.calendarWrap}>
+            <table style={styles.calendarTable}>
+              <thead>
+                <tr>
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                    <th key={d} style={styles.calendarTh}>
+                      {d}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {monthDays.map((week, wIdx) => (
+                  <tr key={wIdx}>
+                    {week.map((dayDate) => {
+                      const dateStr = formatDate(dayDate);
+                      const inMonth = dayDate.getMonth() === viewMonth.getMonth();
+                      const isToday = dateStr === todayStr; // steady
+                      const isSelected = dateStr === selectedDate; // clicked
+
+                      const helpersCount = helperCountByDate[dateStr] || 0;
+
+                      let bg = inMonth ? "#fff" : "#f7f8fb";
+                      let border = "1px solid #e2e6ef";
+                      let color = inMonth ? "#222" : "#8a93a3";
+
+                      // TODAY yellow (steady)
+                      if (isToday) {
+                        bg = "#fff5b5";
+                        border = "2px solid #f2c200";
+                        color = "#222";
+                      }
+
+                      // Selected date blue should still be obvious
+                      if (isSelected) {
+                        bg = "#dbeeff";
+                        border = "2px solid #4b9bff";
+                        color = "#0b3a66";
+                      }
+
+                      return (
+                        <td
+                          key={dateStr}
+                          onClick={() => setSelectedDate(dateStr)}
+                          style={{
+                            ...styles.calendarTd,
+                            background: bg,
+                            border,
+                            color,
+                          }}
+                        >
+                          <div style={{ textAlign: "right", fontWeight: 700 }}>
+                            {dayDate.getDate()}
+                          </div>
+
+                          {helpersCount > 0 && (
+                            <div style={styles.availBadge}>{helpersCount} avail</div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {loadingHelpers && (
+              <div style={{ marginTop: 10, fontSize: 13, color: "#444" }}>
+                Loading helpers…
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* RIGHT */}
+        {/* RIGHT RESULTS */}
         <div style={styles.panelRight}>
           <h3 style={{ marginTop: 0 }}>Available helpers</h3>
 
           {mode === "offering" && (
             <p style={{ fontSize: 13 }}>
-              Helper view: switch to <strong>&quot;I am looking for&quot;</strong> to search helpers.
+              Helper view: switch to <strong>&quot;I am looking for&quot;</strong> to search helpers as a customer.
             </p>
           )}
 
@@ -504,14 +610,14 @@ export default function HomePage() {
             <p style={{ fontSize: 13 }}>
               No helpers found for this selection.
               <br />
-              Default shows everything available — add filters + press <b>Search</b> to narrow down.
+              Default shows everything available — add filters + press <strong>Search</strong> to narrow down.
             </p>
           )}
 
           {mode === "looking" &&
             filteredHelpers.map((helper) => {
               const profile = helper?.profile || {};
-              const slots = safeArr(helper?.availabilitySlots).filter((slot) => slot?.date === selectedDate);
+              const slots = slotsForDate(helper);
 
               const rawName = profile.displayName || helper?.name || "Helper";
               const displayName = formatHelperName(rawName);
@@ -528,23 +634,31 @@ export default function HomePage() {
                   )}
 
                   {slots.length > 0 && (
-                    <div style={{ marginTop: 6 }}>
+                    <div style={{ marginTop: 8 }}>
                       <strong>Available:</strong>
                       <ul style={{ paddingLeft: 18, margin: "4px 0" }}>
                         {slots.map((slot) => (
                           <li key={slot?._id || slot?.id || `${slot?.startTime}-${slot?.endTime}`}>
-                            {slot?.startTime}–{slot?.endTime}{" "}
-                            {slot?.rawServices && `(${slot.rawServices})`}
-                            {(() => {
-                              const r = extractRate(slot);
-                              if (r == null) return null;
-                              return <span style={{ color: "#555" }}> — ${r}/hr</span>;
-                            })()}
+                            {slot?.startTime}–{slot?.endTime}
+                            {slot?.rawServices ? ` (${slot.rawServices})` : ""}
+                            {extractRate(slot) !== null ? ` — $${extractRate(slot)}/hr` : ""}
                           </li>
                         ))}
                       </ul>
                     </div>
                   )}
+
+                  {/* Placeholder for “contact” – we’ll wire this to Messages next */}
+                  <button
+                    type="button"
+                    style={styles.contactBtn}
+                    onClick={() => {
+                      // later: navigate to messages thread / booking
+                      alert("Next step: wire this button to Messages (thread with this helper).");
+                    }}
+                  >
+                    Contact
+                  </button>
                 </div>
               );
             })}
@@ -558,7 +672,7 @@ export default function HomePage() {
 const styles = {
   pageWrap: {
     background: "#f0f2f5",
-    minHeight: "calc(100vh - 80px)",
+    minHeight: "calc(100vh - 80px)", // fill below header
     padding: 20,
     boxSizing: "border-box",
   },
@@ -569,10 +683,10 @@ const styles = {
   },
 
   panelLeft: {
-    width: 280,
+    width: 300,
     background: "#f6f8fb",
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 10,
     border: "1px solid #e0e4ee",
     boxSizing: "border-box",
   },
@@ -580,15 +694,18 @@ const styles = {
     flex: 1,
     background: "#fff",
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 10,
     border: "1px solid #e0e4ee",
     boxSizing: "border-box",
+    minHeight: "calc(100vh - 120px)", // keeps calendar tall
+    display: "flex",
+    flexDirection: "column",
   },
   panelRight: {
-    width: 280,
+    width: 300,
     background: "#f6f8fb",
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 10,
     border: "1px solid #e0e4ee",
     boxSizing: "border-box",
     overflowY: "auto",
@@ -599,7 +716,7 @@ const styles = {
     display: "flex",
     borderRadius: 20,
     overflow: "hidden",
-    border: "1px solid #ccc",
+    border: "1px solid #cbd3df",
     marginBottom: 12,
   },
   toggleBtn: {
@@ -607,63 +724,90 @@ const styles = {
     padding: 10,
     border: "none",
     cursor: "pointer",
-    fontWeight: 600,
+    fontWeight: 800,
+    fontSize: 13,
   },
 
   label: {
     display: "block",
-    marginBottom: 4,
+    marginBottom: 6,
     fontSize: 13,
+    fontWeight: 700,
+    color: "#1b2b3a",
   },
   input: {
     width: "100%",
-    padding: 8,
+    padding: 10,
     borderRadius: 6,
-    border: "1px solid #ccc",
+    border: "1px solid #cbd3df",
     fontSize: 14,
     boxSizing: "border-box",
+    background: "#fff",
   },
 
   dropdown: {
     position: "absolute",
-    top: "100%",
+    top: "calc(100% + 6px)",
     left: 0,
     right: 0,
     background: "#fff",
-    border: "1px solid #ccc",
-    borderRadius: 6,
-    zIndex: 9999,
-    maxHeight: 180,
+    border: "1px solid #cbd3df",
+    borderRadius: 8,
+    overflow: "hidden",
+    boxShadow: "0 10px 20px rgba(0,0,0,0.10)",
+    zIndex: 99999,
+    maxHeight: 220,
     overflowY: "auto",
-    marginTop: 6,
-    boxShadow: "0 8px 18px rgba(0,0,0,0.10)",
   },
   dropdownItem: {
-    padding: "8px 10px",
+    padding: "10px 12px",
     cursor: "pointer",
-    borderBottom: "1px solid #eee",
-    background: "#fff",
+    borderBottom: "1px solid #f0f2f5",
+    fontSize: 14,
   },
 
   primaryBtn: {
     flex: 1,
-    padding: "10px 14px",
     background: "#003f63",
     color: "#fff",
     border: "none",
     borderRadius: 8,
-    cursor: "pointer",
+    padding: "10px 12px",
     fontWeight: 800,
+    cursor: "pointer",
   },
-  secondaryBtn: {
+  ghostBtn: {
     flex: 1,
-    padding: "10px 14px",
     background: "#fff",
     color: "#003f63",
     border: "1px solid #003f63",
     borderRadius: 8,
-    cursor: "pointer",
+    padding: "10px 12px",
     fontWeight: 800,
+    cursor: "pointer",
+  },
+
+  tipBox: {
+    fontSize: 12.5,
+    color: "#4a5568",
+    background: "#eef3fb",
+    border: "1px solid #d5e2f6",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+    lineHeight: 1.35,
+  },
+
+  activeBox: {
+    background: "#fff",
+    border: "1px solid #dfe6f3",
+    borderRadius: 10,
+    padding: 12,
+  },
+  activeLine: {
+    fontSize: 12.5,
+    color: "#243041",
+    marginTop: 4,
   },
 
   monthNav: {
@@ -671,68 +815,72 @@ const styles = {
     justifyContent: "center",
     alignItems: "center",
     gap: 12,
-    marginBottom: 8,
-  },
-  navBtn: {
-    border: "1px solid #ccc",
-    background: "#fff",
-    borderRadius: 4,
-    cursor: "pointer",
-    padding: "4px 8px",
-  },
-
-  filterLine: {
-    display: "flex",
-    gap: 14,
-    flexWrap: "wrap",
-    fontSize: 12,
-    color: "#333",
-    background: "#f6f8fb",
-    border: "1px solid #e0e4ee",
-    padding: "8px 10px",
-    borderRadius: 8,
     marginBottom: 12,
   },
+  navBtn: {
+    border: "1px solid #cbd3df",
+    background: "#fff",
+    borderRadius: 6,
+    cursor: "pointer",
+    padding: "6px 10px",
+    fontWeight: 900,
+  },
 
+  calendarWrap: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+  },
   calendarTable: {
     width: "100%",
-    borderCollapse: "collapse",
+    borderCollapse: "separate",
+    borderSpacing: 0,
     tableLayout: "fixed",
+    flex: 1,
   },
   calendarTh: {
+    textAlign: "center",
     padding: "10px 0",
-    borderBottom: "1px solid #ddd",
     fontSize: 13,
+    fontWeight: 900,
+    borderBottom: "1px solid #e2e6ef",
     background: "#f2f5f9",
   },
-  // Make calendar occupy most of panel height by using larger cells
   calendarTd: {
-    position: "relative",
-    height: 110, // <-- bigger than before, fills space
-    padding: "8px 10px",
-    cursor: "pointer",
-    fontSize: 12,
     verticalAlign: "top",
+    height: 90,
+    padding: "6px 8px",
+    cursor: "pointer",
     boxSizing: "border-box",
   },
-
   availBadge: {
-    position: "absolute",
-    left: 10,
-    bottom: 10,
-    fontSize: 10,
+    display: "inline-block",
+    marginTop: 6,
+    fontSize: 11,
     color: "#003f63",
     background: "#e1f0ff",
     borderRadius: 999,
-    padding: "2px 6px",
+    padding: "2px 8px",
+    fontWeight: 800,
   },
 
   helperCard: {
     background: "#fff",
-    borderRadius: 6,
-    padding: 10,
-    marginBottom: 10,
-    border: "1px solid #ddd",
-    fontSize: 12,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    border: "1px solid #dfe6f3",
+    fontSize: 13,
+  },
+  contactBtn: {
+    width: "100%",
+    marginTop: 10,
+    padding: "10px 12px",
+    borderRadius: 8,
+    border: "1px solid #003f63",
+    background: "#fff",
+    color: "#003f63",
+    fontWeight: 900,
+    cursor: "pointer",
   },
 };
