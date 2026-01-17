@@ -1,5 +1,24 @@
 import React, { useEffect, useMemo, useState } from "react";
-import api from "../utils/api";
+
+// Safely build an API URL without depending on ../utils/api
+function joinUrl(base, path) {
+  const b = (base || "").replace(/\/+$/, "");
+  const p = (path || "").replace(/^\/+/, "");
+  if (!b) return `/${p}`;
+  return `${b}/${p}`;
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status} ${res.statusText} - ${text}`.trim());
+  }
+  return res.json();
+}
 
 function formatDate(d) {
   const yyyy = d.getFullYear();
@@ -66,8 +85,12 @@ function HomePage() {
   useEffect(() => {
     async function fetchHelpers() {
       try {
-        const res = await api.get("/helpers/public");
-        setHelpers(res.data || []);
+        // If you have REACT_APP_API_URL set, it will use it (ex: https://your-backend.onrender.com)
+        // Otherwise it calls same-origin "/api/..."
+        const base = process.env.REACT_APP_API_URL || "";
+        const url = joinUrl(base, "/api/helpers/public");
+        const data = await fetchJson(url);
+        setHelpers(Array.isArray(data) ? data : data?.data || []);
       } catch (err) {
         console.error("Failed to load helpers:", err);
         setHelpers([]);
@@ -167,8 +190,6 @@ function HomePage() {
     }
 
     // radius filter is placeholder until we add geo distance
-    // For now it doesn't filter out anything.
-    // Later: compute distance based on helper profile coords.
     return true;
   }
 
@@ -185,8 +206,6 @@ function HomePage() {
     helpers.forEach((helper) => {
       (helper.availabilitySlots || []).forEach((slot) => {
         if (!slot.date) return;
-        // only count helpers that match term filters roughly
-        // (keep this simple: count all helpers with availability that day)
         map[slot.date] = (map[slot.date] || 0) + 1;
       });
     });
@@ -494,7 +513,7 @@ function HomePage() {
 
             return (
               <div
-                key={helper.id}
+                key={helper._id || helper.id || rawName}
                 style={{
                   background: "#fff",
                   borderRadius: "6px",
@@ -509,26 +528,16 @@ function HomePage() {
                   {profile.city || "Location not specified"}
                 </div>
                 {profile.services && (
-                  <div
-                    style={{
-                      marginTop: "4px",
-                      color: "#003f63",
-                    }}
-                  >
+                  <div style={{ marginTop: "4px", color: "#003f63" }}>
                     {profile.services}
                   </div>
                 )}
                 {slots.length > 0 && (
                   <div style={{ marginTop: "4px" }}>
                     <strong>Available:</strong>
-                    <ul
-                      style={{
-                        paddingLeft: "18px",
-                        margin: "2px 0",
-                      }}
-                    >
+                    <ul style={{ paddingLeft: "18px", margin: "2px 0" }}>
                       {slots.map((slot) => (
-                        <li key={slot.id}>
+                        <li key={slot._id || slot.id || `${slot.startTime}-${slot.endTime}`}>
                           {slot.startTime}–{slot.endTime}{" "}
                           {slot.rawServices && `(${slot.rawServices})`}
                         </li>
