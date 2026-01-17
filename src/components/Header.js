@@ -35,14 +35,15 @@ function Header() {
 
   return (
     <header className="tfh-header">
-      <div className="tfh-header-left">
-        <img src={logo} alt="Time For Hire logo" className="tfh-logo-image" />
+      <Link to="/" className="tfh-header-left" style={{ textDecoration: "none" }}>
+  <img src={logo} alt="Time For Hire logo" className="tfh-logo-image" />
 
-        <div className="tfh-title-group">
-          <span className="tfh-title">Time For Hire</span>
-          <span className="tfh-slogan">MAKE IT WORK</span>
-        </div>
-      </div>
+  <div className="tfh-title-group">
+    <span className="tfh-title">Time For Hire</span>
+    <span className="tfh-slogan">MAKE IT WORK</span>
+  </div>
+</Link>
+
 
       <nav className="tfh-header-right">
         {/* Always show Home */}
