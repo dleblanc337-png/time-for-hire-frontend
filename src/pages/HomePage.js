@@ -206,19 +206,16 @@ export default function HomePage() {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [showDropdown]);
 
-  // Load helpers (public)
+    // Load helpers (public) — reusable + refreshable
   useEffect(() => {
     let alive = true;
 
     async function load() {
       setLoadingHelpers(true);
       try {
-        // This endpoint already exists in your file history
         const url = joinUrl(API_BASE, "/api/helpers/public");
         const data = await fetchJson(url);
-
         if (!alive) return;
-        // Expect array of helpers
         setHelpers(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("HomePage: failed to load public helpers:", err);
@@ -229,11 +226,36 @@ export default function HomePage() {
       }
     }
 
+    // initial load
     load();
+
+    // refresh when coming back to the tab (very common after posting availability)
+    function onFocus() {
+      load();
+    }
+    window.addEventListener("focus", onFocus);
+
+    // refresh when helper availability page sets a flag
+    function onStorage(e) {
+      if (e.key === "tfh_refresh_home") load();
+    }
+    window.addEventListener("storage", onStorage);
+
+    // also refresh immediately if flag already exists (same-tab navigation)
+    const flag = localStorage.getItem("tfh_refresh_home");
+    if (flag) {
+      // consume it so it doesn’t keep reloading
+      localStorage.removeItem("tfh_refresh_home");
+      load();
+    }
+
     return () => {
       alive = false;
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("storage", onStorage);
     };
   }, [API_BASE]);
+
 
   // Build calendar grid
   const monthDays = useMemo(() => {
