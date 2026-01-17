@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { suggestServices } from "../data/serviceKeywords";
 
 /**
@@ -132,6 +133,27 @@ export default function HomePage() {
     ""; // if empty, uses same-origin
 
   const todayStr = useMemo(() => formatDate(new Date()), []);
+const myAvailDates = useMemo(() => {
+  if (!isLoggedIn) return new Set();
+  const set = new Set();
+
+  helpers.forEach((h) => {
+    const helperEmail = String(h?.email || h?.profile?.email || "").toLowerCase().trim();
+    const helperId = h?._id || h?.id || null;
+
+    const isMe =
+      (myEmail && helperEmail && myEmail === helperEmail) ||
+      (myId && helperId && String(myId) === String(helperId));
+
+    if (!isMe) return;
+
+    safeArr(h?.availabilitySlots).forEach((s) => {
+      if (s?.date) set.add(s.date);
+    });
+  });
+
+  return set;
+}, [helpers, isLoggedIn, myEmail, myId]);
 
   // Mode tab
   const [mode, setMode] = useState("looking"); // "looking" or "offering"
@@ -162,6 +184,18 @@ export default function HomePage() {
   const [loadingHelpers, setLoadingHelpers] = useState(false);
 
   const isLoggedIn = Boolean(localStorage.getItem("token"));
+const navigate = useNavigate();
+
+const me = useMemo(() => {
+  try {
+    return JSON.parse(localStorage.getItem("user") || "null");
+  } catch {
+    return null;
+  }
+}, []);
+
+const myEmail = (me?.email || "").toLowerCase().trim();
+const myId = me?._id || me?.id || null;
 
   // Dropdown behavior
   const [showDropdown, setShowDropdown] = useState(false);
@@ -448,12 +482,28 @@ useEffect(() => {
         <div style={styles.panelLeft}>
           <div style={styles.toggleWrap}>
             <button
-              onClick={() => setMode("looking")}
-              style={{
-                ...styles.toggleBtn,
-                background: mode === "looking" ? "#003f63" : "#fff",
-                color: mode === "looking" ? "#fff" : "#003f63",
-              }}
+              onClick={() => {
+  if (!isLoggedIn) {
+    navigate("/login");
+    return;
+  }
+
+  const helperId = helper?._id || helper?.id || null;
+  const helperEmail = helper?.email || profile?.email || "";
+  const helperName = displayName;
+
+  localStorage.setItem(
+    "tfh_start_chat",
+    JSON.stringify({
+      helperId,
+      helperEmail,
+      helperName,
+      ts: Date.now(),
+    })
+  );
+
+  navigate("/messages");
+}}
             >
               I am looking for
             </button>
@@ -589,6 +639,9 @@ useEffect(() => {
                       const isSelected = dateStr === selectedDate; // clicked
 
                       const helpersCount = helperCountByDate[dateStr] || 0;
+{isLoggedIn && myAvailDates.has(dateStr) && (
+  <div style={styles.myAvailBadge}>You are available</div>
+)}
 
                       let bg = inMonth ? "#fff" : "#f7f8fb";
                       let border = "1px solid #e2e6ef";
@@ -867,6 +920,17 @@ const styles = {
     padding: "6px 10px",
     fontWeight: 900,
   },
+myAvailBadge: {
+  display: "inline-block",
+  marginTop: 6,
+  fontSize: 11,
+  color: "#0b3a66",
+  background: "#dbeeff",
+  borderRadius: 999,
+  padding: "2px 8px",
+  fontWeight: 900,
+  border: "1px solid #4b9bff",
+},
 
   calendarWrap: {
     flex: 1,

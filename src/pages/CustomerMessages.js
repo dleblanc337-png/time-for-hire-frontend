@@ -14,6 +14,15 @@ function CustomerMessages() {
       setActiveHelper(location.state.selectedHelper);
     }
   }, [location.state]);
+useEffect(() => {
+  if (location.state?.selectedHelper) return;
+
+  const saved = localStorage.getItem("tfh_start_chat");
+  if (saved) {
+    setActiveHelper(saved);
+    localStorage.removeItem("tfh_start_chat");
+  }
+}, [location.state]);
 
   function sendMessage() {
     if (!newMessage.trim()) return;
