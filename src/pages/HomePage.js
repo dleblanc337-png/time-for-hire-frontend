@@ -1,397 +1,490 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import api from "../utils/api";
 
-// ---------------- Helpers ----------------
+// ---------- Small helpers ----------
 function formatDate(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
-// "Test Helper" -> "Test H."
-function formatHelperName(rawName) {
-  if (!rawName) return "Helper";
-  const parts = rawName.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0];
-  return `${parts[0]} ${parts[1].charAt(0).toUpperCase()}.`;
+function safeParse(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
 }
 
-// normalize text for matching
-function norm(s) {
-  return (s || "")
+function normalizeText(s) {
+  return String(s || "")
     .toLowerCase()
-    .replace(/[_/\\]+/g, " ")
-    .replace(/[^\w\s-]+/g, " ") // remove punctuation (keep hyphen)
-    .replace(/[-]+/g, " ") // treat hyphen as space
+    .replace(/[_/\\|]+/g, " ")
+    .replace(/[^\p{L}\p{N}\s-]+/gu, " ") // keep letters/numbers/spaces/hyphen
     .replace(/\s+/g, " ")
     .trim();
 }
 
-// turn "car cleaner, snow removal" => ["car cleaner", "snow removal"]
-function splitCommaList(s) {
-  return (s || "")
+// Takes "snow removal, lawn mowing" => ["snow removal","lawn mowing"]
+function splitServices(s) {
+  return normalizeText(s)
     .split(",")
-    .map((t) => t.trim())
+    .map((t) => normalizeText(t))
     .filter(Boolean);
 }
 
-// unique + clean join
-function cleanJoin(list) {
-  const uniq = Array.from(new Set((list || []).map((x) => x.trim()).filter(Boolean)));
-  return uniq.join(", ");
+// Input "snow removal," => "snow removal"
+function cleanSearchTerm(s) {
+  return String(s || "").replace(/,+\s*$/, "").trim();
 }
 
-// ---------------- Service bank (shared keywords) ----------------
-// Keep this list aligned with Profile + Availability keywords
-const SERVICE_BANK = [
-  "carpenter",
-  "handyman",
-  "plumber",
-  "electrician",
-  "painter",
-  "drywall",
-  "flooring",
-  "tiling",
-  "moving",
-  "junk removal",
-  "house cleaning",
-  "car cleaning",
-  "car detail",
-  "lawn",
-  "lawn care",
-  "gardener",
+function formatHelperName(fullName) {
+  const n = String(fullName || "Helper").trim();
+  if (!n) return "Helper";
+  const parts = n.split(/\s+/).filter(Boolean);
+  const first = parts[0] || "Helper";
+  const last = parts[1] ? `${parts[1][0].toUpperCase()}.` : "";
+  return `${first} ${last}`.trim();
+}
+
+// Try to extract a "start/end" from various slot shapes
+function getSlotTimes(slot) {
+  const s = slot || {};
+
+  // common explicit fields
+  const start =
+    s.startTime ||
+    s.timeFrom ||
+    s.start ||
+    (typeof s.time === "string" ? s.time.split("-")[0]?.trim() : null);
+
+  const end =
+    s.endTime ||
+    s.timeTo ||
+    s.end ||
+    (typeof s.time === "string" ? s.time.split("-")[1]?.trim() : null);
+
+  return {
+    start: start || "??",
+    end: end || "??",
+  };
+}
+
+function getServiceTextFromSlot(slot) {
+  // try all variants
+  return (
+    slot.rawServices ||
+    slot.service ||
+    slot.services ||
+    slot.serviceText ||
+    slot.serviceName ||
+    ""
+  );
+}
+
+// ---------- Predictive keyword bank ----------
+const SERVICE_KEYWORDS = [
+  "snow removal",
+  "lawn mowing",
   "gardening",
   "landscaping",
-  "hedge trimming",
-  "snow",
-  "snow removal",
-  "pressure washing",
+  "carpenter",
+  "handyman",
+  "house cleaning",
+  "car cleaning",
+  "moving help",
+  "painting",
+  "plumbing",
+  "electrical",
   "window cleaning",
+  "pressure washing",
   "pet sitting",
   "dog walking",
+  "babysitting",
+  "tutoring",
+  "delivery",
+  "junk removal",
+  "furniture assembly",
 ];
 
-// suggestions for the LAST comma-separated token
-function suggestServices(input) {
-  const token = norm(input);
-  if (!token) return [];
-  const hits = SERVICE_BANK.filter((s) => norm(s).includes(token));
-  return hits.slice(0, 8);
+function suggestServicesFromBank(input) {
+  const raw = cleanSearchTerm(input);
+  const lastToken = raw.split(",").pop()?.trim() || "";
+  const q = normalizeText(lastToken);
+  if (!q || q.length < 1) return [];
+  const out = SERVICE_KEYWORDS.filter((k) => normalizeText(k).includes(q));
+  return out.slice(0, 8);
 }
 
+// Replace the last comma-token with suggestion, keep proper ", " spacing
+function applySuggestionToSearch(current, suggestion) {
+  const raw = String(current || "");
+  const parts = raw.split(",");
+  parts[parts.length - 1] = ` ${suggestion}`; // replace last token
+  const next = parts
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .join(", ");
+  return next ? `${next}, ` : "";
+}
+
+// ---------- Component ----------
 export default function HomePage() {
-  const [mode, setMode] = useState("looking"); // looking | offering
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
-  const [helpers, setHelpers] = useState([]);
-
-  const [maxDistance, setMaxDistance] = useState(""); // km
-  const [maxPrice, setMaxPrice] = useState(""); // $/hr
-
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const todayStr = formatDate(new Date());
-
   const navigate = useNavigate();
 
-const [appliedSearch, setAppliedSearch] = useState("");
-const [appliedDate, setAppliedDate] = useState(formatDate(new Date()));
-const [appliedMaxDistance, setAppliedMaxDistance] = useState("");
-const [appliedMaxPrice, setAppliedMaxPrice] = useState("");
+  const [mode, setMode] = useState("looking"); // "looking" or "offering"
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
+  const [maxDistance, setMaxDistance] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
 
-function applyFilters() {
-  setAppliedSearch(searchTerm);
-  setAppliedDate(selectedDate);
-  setAppliedMaxDistance(maxDistance);
-  setAppliedMaxPrice(maxPrice);
-}
+  // Applied filters (so it only filters when you click Apply)
+  const [applied, setApplied] = useState({
+    term: "",
+    date: formatDate(new Date()),
+    dist: "",
+    price: "",
+  });
 
-function clearFilters() {
-  setSearchTerm("");
-  setSelectedDate(formatDate(new Date()));
-  setMaxDistance("");
-  setMaxPrice("");
+  // Suggestions UI
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
-  setAppliedSearch("");
-  setAppliedDate(formatDate(new Date()));
-  setAppliedMaxDistance("");
-  setAppliedMaxPrice("");
-}
+  const [helpers, setHelpers] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // Load helpers registry from localStorage
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("tfh_helpers") || "[]";
-      setHelpers(JSON.parse(raw));
-    } catch (e) {
-      console.error("Error loading tfh_helpers", e);
-      setHelpers([]);
-    }
-  }, []);
+  // Calendar month view
+  const today = new Date();
+  const [currentMonth, setCurrentMonth] = useState(
+    new Date(today.getFullYear(), today.getMonth(), 1)
+  );
+  const month = currentMonth.getMonth();
+  const year = currentMonth.getFullYear();
+  const todayStr = formatDate(today);
 
-  // --- predictive suggestions for Search ---
-  const lastToken = useMemo(() => {
-    // last comma-separated token being typed
-    const parts = (searchTerm || "").split(",");
-    return (parts[parts.length - 1] || "").trim();
-  }, [searchTerm]);
-
-  const suggestions = useMemo(() => suggestServices(lastToken), [lastToken]);
-
-  function applySuggestion(s) {
-    const parts = (searchTerm || "").split(",");
-    parts[parts.length - 1] = ` ${s}`; // replace last token
-    const next = parts
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .join(", ");
-    setSearchTerm(next + ", "); // trailing ", " so user can keep adding
-  }
-
-  // Search tokens (support multiple comma separated terms)
-  const searchTokens = useMemo(() => {
-    return splitCommaList(appliedSearch).map(norm).filter(Boolean);
-  }, [appliedSearch]);
-
-  // Click "I am offering"
-  function handleOfferingClick() {
-    setMode("offering");
-
-    let user = null;
-    try {
-      const storedUser = localStorage.getItem("user");
-      if (storedUser) user = JSON.parse(storedUser);
-    } catch (e) {}
-
-    if (!user) {
+  const handleOfferingClick = () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
       navigate("/login");
       return;
     }
-    navigate("/helper-availability");
-  }
+    // logged in: go to dashboard (availability)
+    navigate("/availability");
+  };
 
-  // Does a helper match ANY token?
-  function helperMatchesTokens(helper) {
-    const profile = helper.profile || {};
-    const slots = helper.availabilitySlots || helper.availabilitySlots || helper.availabilitySlots || helper.availabilitySlots || helper.availabilitySlots;
+  useEffect(() => {
+    // Load helper public list (with availability)
+    const fetchHelpers = async () => {
+      try {
+        setLoading(true);
 
-    // base texts
-    const profileServicesText = norm(profile.services || "");
-    const profileTags = (profile.serviceTags || []).map((t) => norm(t));
-    const profileTagText = norm((profile.serviceTags || []).join(" "));
-
-    // --- must have a slot on selected date (when looking) ---
-    if (selectedDate) {
-      const hasDate = (helper.availabilitySlots || []).some((s) => s.date === selectedDate);
-      if (!hasDate) return false;
-    }
-
-    // --- distance filter ---
-    if (maxDistance) {
-      const maxDistNum = Number(maxDistance);
-      const helperDist = profile.maxDistanceKm ?? profile.distanceKm ?? null;
-      if (helperDist != null && helperDist > maxDistNum) return false;
-    }
-
-    // --- price filter ---
-    // Prefer the cheapest slot price that day if present; fallback to profile hourlyRate
-    if (maxPrice) {
-      const maxPriceNum = Number(maxPrice);
-
-      let bestRate = null;
-
-      const daySlots = (helper.availabilitySlots || []).filter((s) => s.date === selectedDate);
-      daySlots.forEach((s) => {
-        const r = s.pricePerHour ?? s.hourlyRate ?? null;
-        if (r != null) bestRate = bestRate == null ? r : Math.min(bestRate, r);
-      });
-
-      if (bestRate == null) bestRate = profile.hourlyRate ?? profile.rate ?? null;
-
-      if (bestRate != null && bestRate > maxPriceNum) return false;
-    }
-
-    // if no tokens, match by date + filters only
-    if (searchTokens.length === 0) return true;
-
-    // matches a single token against helper profile + slot data
-    const matchesOne = (tok) => {
-      if (!tok) return true;
-
-      // profile match
-      const profileOk =
-        profileServicesText.includes(tok) ||
-        profileTagText.includes(tok) ||
-        profileTags.some((t) => t.includes(tok) || tok.includes(t));
-
-      // slot match on selectedDate
-      const slotOk = (helper.availabilitySlots || []).some((slot) => {
-        if (slot.date !== selectedDate) return false;
-
-        const slotRaw = norm(slot.rawServices || "");
-        const slotTags = (slot.services || []).map((t) => norm(t));
-        const slotTagText = norm((slot.services || []).join(" "));
-
-        return (
-          slotRaw.includes(tok) ||
-          slotTagText.includes(tok) ||
-          slotTags.some((t) => t.includes(tok) || tok.includes(t))
-        );
-      });
-
-      return profileOk || slotOk;
+        // You likely already have an endpoint like this.
+        // If yours differs, tell me the route name and I’ll align it.
+        const res = await api.get("/public/helpers-with-availability");
+        setHelpers(Array.isArray(res.data) ? res.data : []);
+      } catch (e) {
+        console.error("Home helpers load error:", e);
+        setHelpers([]);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    // ANY token can match
-    return searchTokens.some(matchesOne);
-  }
+    fetchHelpers();
+  }, []);
 
-  const filteredHelpers = useMemo(() => {
-    if (mode !== "looking") return [];
-    return (helpers || []).filter(helperMatchesTokens);
-  }, [helpers, mode, selectedDate, maxDistance, maxPrice, searchTokens]);
+  // ----- Build calendar weeks -----
+  const weeks = useMemo(() => {
+    const firstDayIndex = new Date(year, month, 1).getDay(); // 0-6
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells = [];
 
-  // ---------------- Calendar ----------------
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth();
-  const firstDayOfMonth = new Date(year, month, 1);
-  const lastDayOfMonth = new Date(year, month + 1, 0);
-  const firstWeekday = firstDayOfMonth.getDay();
-  const daysInMonth = lastDayOfMonth.getDate();
+    for (let i = 0; i < firstDayIndex; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
+    const out = [];
+    for (let i = 0; i < cells.length; i += 7) out.push(cells.slice(i, i + 7));
+    while (out.length < 6) out.push(new Array(7).fill(null));
+    return out;
+  }, [year, month]);
+
+  const changeMonth = (delta) => {
+    setCurrentMonth(new Date(year, month + delta, 1));
+  };
+
+  const handleDayClick = (day) => {
+    const d = new Date(year, month, day);
+    setSelectedDate(formatDate(d));
+  };
+
+  // Count helpers per date (for little "X avail" pill)
   const dateHasHelpers = useMemo(() => {
     const map = {};
-    (helpers || []).forEach((h) => {
-      (h.availabilitySlots || []).forEach((slot) => {
-        const d = slot.date;
-        if (!d) return;
-        map[d] = (map[d] || 0) + 1;
-      });
-    });
+    for (const h of helpers) {
+      const slots = h.availabilitySlots || h.availability || h.availabilitySlotsList || [];
+      for (const slot of slots) {
+        const date = slot.date || slot.day || slot.selectedDate;
+        if (!date) continue;
+        map[date] = (map[date] || 0) + 1;
+      }
+    }
     return map;
   }, [helpers]);
 
-  const weeks = [];
-  let currentDay = 1 - firstWeekday;
-  while (currentDay <= daysInMonth) {
-    const weekDays = [];
-    for (let i = 0; i < 7; i++) {
-      weekDays.push(currentDay < 1 || currentDay > daysInMonth ? null : currentDay);
-      currentDay++;
-    }
-    weeks.push(weekDays);
+  // ----- Filtering logic -----
+  function helperMatchesTerm(helper, normalizedTerm) {
+    if (!normalizedTerm) return true;
+
+    const profile = helper.profile || {};
+    const profileServices = splitServices(profile.services || profile.serviceText || "");
+    const profileTags = Array.isArray(profile.serviceTags)
+      ? profile.serviceTags.map((t) => normalizeText(t))
+      : [];
+
+    // also check availability slot service text
+    const slots = helper.availabilitySlots || [];
+    const slotServiceStrings = slots.map((s) => normalizeText(getServiceTextFromSlot(s)));
+
+    const hay = [
+      ...profileServices,
+      ...profileTags,
+      ...slotServiceStrings,
+      normalizeText(profileServices.join(" ")),
+      normalizeText(profileTags.join(" ")),
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    // “snow removal” should match even if term includes comma etc
+    return hay.includes(normalizedTerm);
   }
 
-  function changeMonth(delta) {
-    setCurrentMonth(new Date(year, month + delta, 1));
+  function helperMatchesDate(helper, date) {
+    if (!date) return true;
+    const slots = helper.availabilitySlots || [];
+    return slots.some((s) => (s.date || "") === date);
   }
 
-  function handleDayClick(day) {
-    if (!day) return;
-    setSelectedDate(formatDate(new Date(year, month, day)));
+  function helperMatchesMaxPrice(helper, priceLimit) {
+    if (!priceLimit) return true;
+    const limit = Number(priceLimit);
+    if (!Number.isFinite(limit)) return true;
+
+    // Prefer slot hourlyPrice if present; else profile rate if present
+    const profile = helper.profile || {};
+    const profRate =
+      Number(profile.hourlyRate || profile.rate || profile.price || NaN);
+
+    const slots = helper.availabilitySlots || [];
+    const slotRates = slots
+      .map((s) => Number(s.hourlyPrice || s.pricePerHour || s.rate || NaN))
+      .filter((n) => Number.isFinite(n));
+
+    const bestKnown = slotRates.length
+      ? Math.min(...slotRates)
+      : Number.isFinite(profRate)
+      ? profRate
+      : null;
+
+    if (bestKnown == null) return true; // if unknown, don’t hide them
+    return bestKnown <= limit;
   }
 
-  // ---------------- UI styles ----------------
-  const labelStyle = { display: "block", fontSize: 12, fontWeight: 700, marginBottom: 6, color: "#1b2a3a" };
-  const inputStyle = { width: "100%", padding: "10px 12px", borderRadius: 6, border: "1px solid #cfd7e6", outline: "none" };
+  // NOTE: distance is not implemented without lat/lng — keep it as UI only for now.
+  // We’ll hook it later once we store coordinates on profiles.
+  function helperMatchesDistance(_helper, _dist) {
+    return true;
+  }
+
+  const suggestions = useMemo(
+    () => suggestServicesFromBank(searchTerm),
+    [searchTerm]
+  );
+
+  const filteredHelpers = useMemo(() => {
+    if (mode !== "looking") return [];
+
+    const termNorm = normalizeText(cleanSearchTerm(applied.term));
+    const date = applied.date;
+    const dist = applied.dist;
+    const price = applied.price;
+
+    return helpers.filter((h) => {
+      if (!helperMatchesDate(h, date)) return false;
+      if (!helperMatchesTerm(h, termNorm)) return false;
+      if (!helperMatchesDistance(h, dist)) return false;
+      if (!helperMatchesMaxPrice(h, price)) return false;
+      return true;
+    });
+  }, [helpers, mode, applied]);
+
+  const applyFilters = () => {
+    setApplied({
+      term: searchTerm,
+      date: selectedDate,
+      dist: maxDistance,
+      price: maxPrice,
+    });
+  };
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setSelectedDate(formatDate(new Date()));
+    setMaxDistance("");
+    setMaxPrice("");
+    setApplied({
+      term: "",
+      date: formatDate(new Date()),
+      dist: "",
+      price: "",
+    });
+  };
+
+  // UI helpers
+  const labelStyle = {
+    display: "block",
+    marginBottom: 4,
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#1c1c1c",
+  };
+
+  const inputStyle = {
+    width: "100%",
+    padding: "8px 10px",
+    borderRadius: 6,
+    border: "1px solid #cfd6e4",
+    fontSize: 14,
+    outline: "none",
+    background: "#fff",
+    boxSizing: "border-box",
+  };
+
+  const navButtonStyle = {
+    border: "1px solid #cfd6e4",
+    background: "#fff",
+    borderRadius: 6,
+    cursor: "pointer",
+    padding: "4px 10px",
+  };
 
   return (
     <div
       style={{
         display: "flex",
-        gap: "24px",
+        gap: 24,
         alignItems: "stretch",
         height: "calc(100vh - 130px)",
-        paddingBottom: "24px",
+        paddingBottom: 24,
         boxSizing: "border-box",
       }}
     >
       {/* LEFT: Filters */}
       <div
         style={{
-          width: "260px",
+          width: 300,
           background: "#f6f8fb",
-          padding: "20px",
-          borderRadius: "8px",
+          padding: 18,
+          borderRadius: 10,
           border: "1px solid #e0e4ee",
           display: "flex",
           flexDirection: "column",
+          height: "100%",
         }}
       >
-        {/* Mode tabs */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {/* Mode toggle */}
+        <div
+          style={{
+            display: "flex",
+            marginBottom: 16,
+            borderRadius: 999,
+            overflow: "hidden",
+            border: "1px solid #cfd6e4",
+            background: "#fff",
+          }}
+        >
           <button
             onClick={() => setMode("looking")}
             style={{
               flex: 1,
-              padding: "10px 12px",
-              borderRadius: 999,
-              border: "1px solid #cfd7e6",
-              background: mode === "looking" ? "#0f4c73" : "#fff",
-              color: mode === "looking" ? "#fff" : "#0f4c73",
-              fontWeight: 700,
+              padding: 10,
+              border: "none",
               cursor: "pointer",
+              background: mode === "looking" ? "#003f63" : "transparent",
+              color: mode === "looking" ? "#fff" : "#003f63",
+              fontSize: 13,
+              fontWeight: 700,
             }}
           >
             I am looking for
           </button>
-
           <button
             onClick={handleOfferingClick}
             style={{
               flex: 1,
-              padding: "10px 12px",
-              borderRadius: 999,
-              border: "1px solid #cfd7e6",
-              background: mode === "offering" ? "#0f4c73" : "#fff",
-              color: mode === "offering" ? "#fff" : "#0f4c73",
-              fontWeight: 700,
+              padding: 10,
+              border: "none",
               cursor: "pointer",
+              background: mode === "offering" ? "#003f63" : "transparent",
+              color: mode === "offering" ? "#fff" : "#003f63",
+              fontSize: 13,
+              fontWeight: 700,
             }}
           >
             I am offering
           </button>
         </div>
 
-        {/* Search */}
-        <div style={{ marginBottom: "12px", position: "relative" }}>
+        {/* Search with predictive dropdown */}
+        <div style={{ marginBottom: 12, position: "relative" }}>
           <label style={labelStyle}>Search</label>
           <input
             type="text"
             placeholder="carpenter, lawn, snow..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setShowSuggestions(true);
+            }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => {
+              // small delay so click works
+              setTimeout(() => setShowSuggestions(false), 120);
+            }}
             style={inputStyle}
           />
 
-          {/* Suggestions dropdown */}
-          {suggestions.length > 0 && (
+          {showSuggestions && suggestions.length > 0 && (
             <div
               style={{
                 position: "absolute",
-                top: 68,
+                top: 64,
                 left: 0,
                 right: 0,
                 background: "#fff",
-                border: "1px solid #cfd7e6",
-                borderRadius: 6,
-                boxShadow: "0 10px 20px rgba(0,0,0,0.08)",
-                zIndex: 50,
+                border: "1px solid #cfd6e4",
+                borderRadius: 8,
                 overflow: "hidden",
+                zIndex: 20,
+                boxShadow: "0 6px 18px rgba(0,0,0,0.08)",
               }}
             >
               {suggestions.map((s) => (
                 <div
                   key={s}
-                  onMouseDown={(e) => {
-                    // onMouseDown so it applies before input loses focus
-                    e.preventDefault();
-                    applySuggestion(s);
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setSearchTerm((prev) => applySuggestionToSearch(prev, s));
+                    setShowSuggestions(false);
                   }}
                   style={{
                     padding: "10px 12px",
                     cursor: "pointer",
-                    borderBottom: "1px solid #eef2f7",
+                    fontSize: 14,
+                    borderBottom: "1px solid #eef2f8",
                   }}
                 >
                   {s}
@@ -402,15 +495,24 @@ function clearFilters() {
         </div>
 
         {/* Selected date */}
-        <div style={{ marginBottom: "12px" }}>
+        <div style={{ marginBottom: 12 }}>
           <label style={labelStyle}>Selected date</label>
-          <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} style={inputStyle} />
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            style={inputStyle}
+          />
         </div>
 
-        {/* Distance */}
-        <div style={{ marginBottom: "12px" }}>
+        {/* Distance radius */}
+        <div style={{ marginBottom: 12 }}>
           <label style={labelStyle}>Distance radius</label>
-          <select value={maxDistance} onChange={(e) => setMaxDistance(e.target.value)} style={inputStyle}>
+          <select
+            value={maxDistance}
+            onChange={(e) => setMaxDistance(e.target.value)}
+            style={inputStyle}
+          >
             <option value="">Any distance</option>
             <option value="5">Within 5 km</option>
             <option value="10">Within 10 km</option>
@@ -419,92 +521,106 @@ function clearFilters() {
           </select>
         </div>
 
-        {/* Price */}
-        <div style={{ marginBottom: "12px" }}>
+        {/* Apply/Clear + Max price */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+          <button
+            onClick={applyFilters}
+            style={{
+              flex: 1,
+              padding: "10px 12px",
+              borderRadius: 8,
+              border: "1px solid #003f63",
+              background: "#003f63",
+              color: "#fff",
+              cursor: "pointer",
+              fontWeight: 800,
+            }}
+          >
+            Apply Filters
+          </button>
+          <button
+            onClick={clearFilters}
+            style={{
+              width: 92,
+              padding: "10px 12px",
+              borderRadius: 8,
+              border: "1px solid #cfd6e4",
+              background: "#fff",
+              cursor: "pointer",
+              fontWeight: 800,
+              color: "#003f63",
+            }}
+          >
+            Clear
+          </button>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
           <label style={labelStyle}>Max price ($/hr)</label>
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-  <button
-    onClick={applyFilters}
-    style={{
-      flex: 1,
-      padding: "10px 12px",
-      borderRadius: 8,
-      border: "1px solid #0f4c73",
-      background: "#0f4c73",
-      color: "#fff",
-      fontWeight: 800,
-      cursor: "pointer",
-    }}
-  >
-    Apply Filters
-  </button>
-
-  <button
-    onClick={clearFilters}
-    style={{
-      padding: "10px 12px",
-      borderRadius: 8,
-      border: "1px solid #cfd7e6",
-      background: "#fff",
-      color: "#0f4c73",
-      fontWeight: 800,
-      cursor: "pointer",
-      width: 90,
-    }}
-  >
-    Clear
-  </button>
-</div>
-
-          <select value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} style={inputStyle}>
+          <select
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+            style={inputStyle}
+          >
             <option value="">Any price</option>
             <option value="25">Up to $25/hr</option>
-            <option value="35">Up to $35/hr</option>
             <option value="50">Up to $50/hr</option>
             <option value="75">Up to $75/hr</option>
             <option value="100">Up to $100/hr</option>
           </select>
         </div>
 
-        <div style={{ fontSize: 12, color: "#516071", marginTop: 8 }}>
-          Tip: choose a date where a helper has set availability, then type a keyword matching their services. Use filters to narrow results.
-        </div>
+        <p style={{ fontSize: 11, color: "#566", marginTop: 6 }}>
+          Tip: Choose a date where a helper has availability, then type a keyword
+          matching their services. Click <b>Apply Filters</b> to update results.
+        </p>
       </div>
 
-      {/* CENTER: Calendar */}
-      <div
-        style={{
-          flex: 1,
-          background: "#fff",
-          borderRadius: "8px",
-          border: "1px solid #e0e4ee",
-          padding: "16px",
-          overflow: "auto",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 12 }}>
-          <button
-            onClick={() => changeMonth(-1)}
-            style={{ padding: "6px 10px", border: "1px solid #cfd7e6", borderRadius: 6, background: "#fff", cursor: "pointer" }}
-          >
-            &lt;
+      {/* MIDDLE: Calendar */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            marginBottom: 10,
+            gap: 12,
+          }}
+        >
+          <button onClick={() => changeMonth(-1)} style={navButtonStyle}>
+            {"<"}
           </button>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>
-            {currentMonth.toLocaleString("en-US", { month: "long" })} {year}
-          </div>
-          <button
-            onClick={() => changeMonth(1)}
-            style={{ padding: "6px 10px", border: "1px solid #cfd7e6", borderRadius: 6, background: "#fff", cursor: "pointer" }}
-          >
-            &gt;
+          <h2 style={{ margin: 0, fontWeight: 900 }}>
+            {currentMonth.toLocaleString("default", { month: "long" })} {year}
+          </h2>
+          <button onClick={() => changeMonth(1)} style={navButtonStyle}>
+            {">"}
           </button>
         </div>
 
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            background: "#fff",
+            borderRadius: 10,
+            overflow: "hidden",
+            border: "1px solid #e0e4ee",
+            flex: 1,
+          }}
+        >
           <thead>
-            <tr>
+            <tr style={{ background: "#f0f3fa" }}>
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                <th key={d} style={{ padding: "8px", textAlign: "center", background: "#f0f4fa", fontWeight: 800 }}>
+                <th
+                  key={d}
+                  style={{
+                    padding: "8px 0",
+                    fontSize: 12,
+                    borderBottom: "1px solid #e0e4ee",
+                    fontWeight: 800,
+                  }}
+                >
                   {d}
                 </th>
               ))}
@@ -516,38 +632,57 @@ function clearFilters() {
               <tr key={wi}>
                 {week.map((day, di) => {
                   if (!day) {
-                    return <td key={di} style={{ border: "1px solid #eef2f7", height: 90 }} />;
+                    return (
+                      <td key={di} style={{ height: 64, border: "1px solid #f2f2f2" }} />
+                    );
                   }
 
-                  const dateStr = formatDate(new Date(year, month, day));
-                  const has = dateHasHelpers[dateStr] || 0;
+                  const dateObj = new Date(year, month, day);
+                  const dateStr = formatDate(dateObj);
+                  const isSelected = dateStr === selectedDate;
+                  const isToday = dateStr === todayStr;
+                  const helpersCount = dateHasHelpers[dateStr] || 0;
 
-                  const isSelected = selectedDate === dateStr;
-                  const isToday = todayStr === dateStr;
-
-                  let bg = "#fff";
-                  if (isToday) bg = "#fff6cc";
-                  if (has > 0) bg = "#e7f1ff";
-                  if (isSelected) bg = "#cfe5ff";
+                  const bg = isSelected
+                    ? "#e1f0ff"
+                    : isToday
+                    ? "#fff7c2"
+                    : "#fff";
 
                   return (
                     <td
                       key={di}
                       onClick={() => handleDayClick(day)}
                       style={{
-                        border: "1px solid #eef2f7",
-                        height: 90,
-                        verticalAlign: "top",
-                        padding: 8,
+                        position: "relative",
+                        height: 64,
+                        border: `2px solid ${isToday ? "#f2b600" : "#f2f2f2"}`,
+                        textAlign: "right",
+                        padding: "6px 8px",
                         cursor: "pointer",
                         background: bg,
-                        outline: isToday ? "2px solid #f2c94c" : "none",
+                        color: "#222",
+                        fontSize: 12,
+                        boxSizing: "border-box",
                       }}
                     >
-                      <div style={{ fontWeight: 800, marginBottom: 6 }}>{day}</div>
-                      {has > 0 && (
-                        <div style={{ fontSize: 12, color: "#1b4f8a", fontWeight: 700 }}>
-                          {has} avail
+                      <div style={{ fontWeight: 800 }}>{day}</div>
+
+                      {helpersCount > 0 && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            left: 8,
+                            bottom: 6,
+                            fontSize: 10,
+                            color: "#003f63",
+                            background: "#e1f0ff",
+                            borderRadius: 999,
+                            padding: "2px 6px",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {helpersCount} avail
                         </div>
                       )}
                     </td>
@@ -562,85 +697,95 @@ function clearFilters() {
       {/* RIGHT: Available helpers */}
       <div
         style={{
-          width: "320px",
+          width: 320,
           background: "#f6f8fb",
-          padding: "16px",
-          borderRadius: "8px",
+          padding: 16,
+          borderRadius: 10,
           border: "1px solid #e0e4ee",
-          overflow: "auto",
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          maxHeight: "100%",
+          overflowY: "auto",
         }}
       >
-        <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 12 }}>Available helpers</div>
+        <h3 style={{ marginTop: 0, marginBottom: 10, fontWeight: 900 }}>
+          Available helpers
+        </h3>
 
-        {filteredHelpers.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#516071" }}>
-            No helpers match your search for this date.
-          </div>
-        ) : (
-          filteredHelpers.map((h, idx) => {
-            const profile = h.profile || {};
-            const fullName = profile.publicName || profile.name || "Helper";
-            const displayName = formatHelperName(fullName);
+        {mode === "offering" && (
+          <p style={{ fontSize: 13 }}>
+            Switch to <b>I am looking for</b> to search helpers.
+          </p>
+        )}
 
-            const city = profile.city || profile.location || "";
-            const servicesList = splitCommaList(profile.services || "");
-            const cleanServices = cleanJoin(servicesList);
+        {mode === "looking" && loading && <p style={{ fontSize: 13 }}>Loading…</p>}
 
-            const daySlots = (h.availabilitySlots || []).filter((s) => s.date === selectedDate);
+        {mode === "looking" && !loading && filteredHelpers.length === 0 && (
+          <p style={{ fontSize: 13 }}>
+            No helpers found for this selection.
+            <br />
+            Try another keyword or date, then click <b>Apply Filters</b>.
+          </p>
+        )}
+
+        {mode === "looking" &&
+          filteredHelpers.map((helper) => {
+            const profile = helper.profile || {};
+            const slotsAll = helper.availabilitySlots || [];
+            const slots = slotsAll.filter((slot) => (slot.date || "") === applied.date);
+
+            const rawName = profile.displayName || helper.name || "Helper";
+            const displayName = formatHelperName(rawName);
+
+            const servicesRaw = profile.services || "";
+            const servicesClean = splitServices(servicesRaw).join(", ");
 
             return (
               <div
-                key={idx}
+                key={helper.id || helper._id || displayName}
                 style={{
                   background: "#fff",
-                  border: "1px solid #e0e4ee",
-                  borderRadius: 8,
+                  borderRadius: 10,
                   padding: 12,
                   marginBottom: 12,
+                  border: "1px solid #d7deed",
+                  fontSize: 13,
                 }}
               >
-                <div style={{ fontSize: 15, fontWeight: 900 }}>{displayName}</div>
-                {city && <div style={{ fontSize: 12, color: "#516071" }}>{city}</div>}
+                <div style={{ fontWeight: 900, fontSize: 14 }}>{displayName}</div>
 
-                {cleanServices && (
-                  <div style={{ fontSize: 13, marginTop: 8 }}>
-                    <span style={{ fontWeight: 800 }}>Services:</span> {cleanServices}
+                <div style={{ color: "#555", marginTop: 3 }}>
+                  {profile.city || "Location not specified"}
+                </div>
+
+                {servicesClean && (
+                  <div style={{ marginTop: 6 }}>
+                    <span style={{ fontWeight: 900 }}>Services:</span>{" "}
+                    <span style={{ color: "#003f63" }}>{servicesClean}</span>
                   </div>
                 )}
 
-                <div style={{ fontSize: 13, marginTop: 8 }}>
-                  <span style={{ fontWeight: 800 }}>Available:</span>
-                  <ul style={{ marginTop: 6, paddingLeft: 18 }}>
-                    {daySlots.map((s, i) => {
-                      const serviceText = cleanJoin(splitCommaList(s.rawServices || ""));
-                      const rate = s.pricePerHour ?? s.hourlyRate ?? null;
-                      return (
-                        <li key={i} style={{ marginBottom: 4 }}>
-                          const start =
-  s.start ||
-  s.startTime ||
-  s.timeFrom ||
-  (typeof s.time === "string" ? s.time.split("-")[0]?.trim() : null) ||
-  "??";
-
-const end =
-  s.end ||
-  s.endTime ||
-  s.timeTo ||
-  (typeof s.time === "string" ? s.time.split("-")[1]?.trim() : null) ||
-  "??";
-
-                          {serviceText ? `(${serviceText})` : ""}
-                          {rate != null ? ` — $${rate}/hr` : ""}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
+                {slots.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontWeight: 900, marginBottom: 4 }}>Available:</div>
+                    <ul style={{ paddingLeft: 18, margin: 0 }}>
+                      {slots.map((slot) => {
+                        const { start, end } = getSlotTimes(slot);
+                        const sv = splitServices(getServiceTextFromSlot(slot)).join(", ");
+                        return (
+                          <li key={slot.id || slot._id || `${start}-${end}-${sv}`}>
+                            {start}–{end}
+                            {sv ? ` (${sv})` : ""}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
               </div>
             );
-          })
-        )}
+          })}
       </div>
     </div>
   );
