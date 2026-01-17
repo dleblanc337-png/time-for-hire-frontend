@@ -1,15 +1,17 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { suggestServices } from "../data/serviceKeywords";
+
 /**
- * HomePage.js (full file)
- * - TODAY highlight is steady (yellow) independent from selected date.
- * - Selected date highlight is blue.
- * - Predictive dropdown suggestions under Search (z-index fixed).
- * - Full-height layout (fills screen).
- * - No ../utils/api import (Render-safe).
+ * HomePage.js
+ * - TODAY highlight steady (yellow) independent from selected date
+ * - Selected date highlight blue
+ * - Predictive dropdown uses SAME logic as Profile.js via suggestServices()
+ * - Search (Apply) + Reset filters
+ * - Calendar badges react to filters (keyword + max price)
+ * - Render-safe: no ../utils/api import
  */
 
-// ---------- helpers ----------
+// ---------- small helpers ----------
 function joinUrl(base, path) {
   const b = (base || "").replace(/\/+$/, "");
   const p = (path || "").replace(/^\/+/, "");
@@ -35,13 +37,6 @@ function formatDate(d) {
   const mm = pad2(d.getMonth() + 1);
   const dd = pad2(d.getDate());
   return `${yyyy}-${mm}-${dd}`;
-}
-
-function parseDateStr(dateStr) {
-  // YYYY-MM-DD -> Date in local time
-  const [y, m, d] = String(dateStr || "").split("-").map((x) => Number(x));
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d);
 }
 
 function addDays(date, n) {
@@ -80,11 +75,8 @@ function normalizeTerm(term) {
     .trim();
 }
 
-function splitKeywords(text) {
-  return String(text || "")
-    .split(/[,/|-]/g)
-    .map((x) => normalizeTerm(x))
-    .filter(Boolean);
+function safeArr(v) {
+  return Array.isArray(v) ? v : [];
 }
 
 function formatHelperName(name) {
@@ -95,8 +87,36 @@ function formatHelperName(name) {
   return `${first} ${lastInitial}`.trim();
 }
 
-function safeArr(v) {
-  return Array.isArray(v) ? v : [];
+function extractRate(slot) {
+  const r = Number(
+    slot?.hourlyRate ??
+      slot?.rate ??
+      slot?.price ??
+      slot?.hourly ??
+      slot?.pricePerHour ??
+      NaN
+  );
+  return Number.isFinite(r) ? r : null;
+}
+
+function helperHasKeywordMatch(helper, keyword) {
+  const term = normalizeTerm(keyword);
+  if (!term) return true;
+
+  const profile = helper?.profile || {};
+  const tags = safeArr(profile.serviceTags).map((t) => String(t || "").toLowerCase());
+  const servicesText = String(profile.services || "").toLowerCase();
+
+  const slotText = safeArr(helper?.availabilitySlots)
+    .map((s) => `${s?.rawServices || ""} ${s?.services || ""}`)
+    .join(" ")
+    .toLowerCase();
+
+  const tagHit = tags.some((t) => t.includes(term));
+  const servicesHit = servicesText.includes(term);
+  const slotHit = slotText.includes(term);
+
+  return tagHit || servicesHit || slotHit;
 }
 
 // ---------- component ----------
@@ -104,25 +124,23 @@ export default function HomePage() {
   // steady "today"
   const todayStr = useMemo(() => formatDate(new Date()), []);
 
-  // UI state
+  // UI: mode
   const [mode, setMode] = useState("looking"); // "looking" | "offering"
+
+  // Applied filters (what the calendar/results use)
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDate, setSelectedDate] = useState(todayStr);
-
-  // extra filters (kept)
-  const [radius, setRadius] = useState("any");
+  const [radius, setRadius] = useState("any");   // placeholder (no geo yet)
   const [maxPrice, setMaxPrice] = useState("any");
+
+  // Draft filters (what user edits before pressing Search/Apply)
+  const [draftSearch, setDraftSearch] = useState("");
+  const [draftSelectedDate, setDraftSelectedDate] = useState(todayStr);
+  const [draftRadius, setDraftRadius] = useState("any");
+  const [draftMaxPrice, setDraftMaxPrice] = useState("any");
 
   // data
   const [helpers, setHelpers] = useState([]);
-
-  // dropdown state
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const inputRef = useRef(null);
-  const dropdownRef = useRef(null);
-
-  const normalizedTerm = useMemo(() => normalizeTerm(searchTerm), [searchTerm]);
 
   // month view
   const [viewMonth, setViewMonth] = useState(() => {
@@ -134,7 +152,6 @@ export default function HomePage() {
   useEffect(() => {
     async function load() {
       try {
-        // Uses env on Render if set; otherwise same-origin /api/...
         const base = process.env.REACT_APP_API_URL || "";
         const url = joinUrl(base, "/api/helpers/public");
         const data = await fetchJson(url);
@@ -154,15 +171,13 @@ export default function HomePage() {
     const last = endOfMonth(viewMonth);
 
     const start = new Date(first);
-    start.setDate(first.getDate() - first.getDay()); // sunday
+    start.setDate(first.getDate() - first.getDay()); // Sunday
 
     const end = new Date(last);
-    end.setDate(last.getDate() + (6 - last.getDay())); // saturday
+    end.setDate(last.getDate() + (6 - last.getDay())); // Saturday
 
     const days = [];
-    for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
-      days.push(new Date(d));
-    }
+    for (let d = new Date(start); d <= end; d = addDays(d, 1)) days.push(new Date(d));
     return chunkWeeks(days);
   }, [viewMonth]);
 
@@ -170,151 +185,120 @@ export default function HomePage() {
     return viewMonth.toLocaleString("default", { month: "long", year: "numeric" });
   }, [viewMonth]);
 
-  // Build keywords for dropdown based on helper-entered fields
-  const allKeywords = useMemo(() => {
-    const set = new Set();
+  // -------------------------
+  // Dropdown suggestions (same pattern as Profile.js)
+  // -------------------------
+  const serviceToken = (draftSearch || "").split(",").pop()?.trim() || "";
+  const serviceSuggestions = suggestServices(serviceToken);
 
-    helpers.forEach((h) => {
-      const p = h?.profile || {};
-      const slots = safeArr(h?.availabilitySlots);
+  function applyServiceSuggestion(suggestion) {
+    const current = draftSearch || "";
+    const parts = current.split(",");
+    parts[parts.length - 1] = suggestion;
 
-      // profile.serviceTags
-      safeArr(p.serviceTags).forEach((t) => {
-        const v = normalizeTerm(t);
-        if (v) set.add(v);
-      });
+    const next = parts
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+      .join(", ");
 
-      // profile.services (free text)
-      splitKeywords(p.services).forEach((v) => set.add(v));
-
-      // availability slot services
-      slots.forEach((s) => {
-        splitKeywords(s?.rawServices).forEach((v) => set.add(v));
-        splitKeywords(s?.services).forEach((v) => set.add(v));
-      });
-    });
-
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [helpers]);
-
-  const suggestions = useMemo(() => {
-    const t = normalizedTerm;
-    if (!t) return allKeywords.slice(0, 12);
-    return allKeywords.filter((k) => k.includes(t)).slice(0, 12);
-  }, [allKeywords, normalizedTerm]);
-
-  function pickSuggestion(word) {
-    setSearchTerm(word);
-    setShowDropdown(false);
-    setActiveIndex(-1);
+    // trailing comma-space to keep entering
+    setDraftSearch(next ? `${next}, ` : "");
   }
 
-  function onSearchKeyDown(e) {
-    if (!showDropdown) return;
-
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, suggestions.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter") {
-      if (activeIndex >= 0 && suggestions[activeIndex]) {
-        e.preventDefault();
-        pickSuggestion(suggestions[activeIndex]);
-      }
-    } else if (e.key === "Escape") {
-      setShowDropdown(false);
-      setActiveIndex(-1);
-    }
+  // -------------------------
+  // Apply / Reset
+  // -------------------------
+  function onApplyFilters() {
+    setSearchTerm(draftSearch);
+    setSelectedDate(draftSelectedDate);
+    setRadius(draftRadius);
+    setMaxPrice(draftMaxPrice);
   }
 
-  // close dropdown on outside click
-  useEffect(() => {
-    function onDocClick(e) {
-      if (!showDropdown) return;
-      const inInput = inputRef.current && inputRef.current.contains(e.target);
-      const inDrop = dropdownRef.current && dropdownRef.current.contains(e.target);
-      if (!inInput && !inDrop) {
-        setShowDropdown(false);
-        setActiveIndex(-1);
-      }
-    }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [showDropdown]);
+  function onResetFilters() {
+    setDraftSearch("");
+    setDraftSelectedDate(todayStr);
+    setDraftRadius("any");
+    setDraftMaxPrice("any");
 
-  // helper counts per day (badge)
-  const helperCountByDate = useMemo(() => {
-    const map = {};
-    if (mode !== "looking") return map;
+    setSearchTerm("");
+    setSelectedDate(todayStr);
+    setRadius("any");
+    setMaxPrice("any");
+  }
 
-    helpers.forEach((helper) => {
-      safeArr(helper?.availabilitySlots).forEach((slot) => {
-        if (!slot?.date) return;
-        map[slot.date] = (map[slot.date] || 0) + 1;
-      });
-    });
+  const normalizedAppliedTerm = useMemo(() => normalizeTerm(searchTerm), [searchTerm]);
 
-    return map;
-  }, [helpers, mode]);
-
+  // -------------------------
+  // Filtered helpers (right column)
+  // -------------------------
   function helperMatches(helper) {
     const profile = helper?.profile || {};
     const slots = safeArr(helper?.availabilitySlots);
 
-    // must have a slot on selected date
+    // must have slot on selected date
     const hasDate = slots.some((s) => s?.date === selectedDate);
     if (!hasDate) return false;
 
-    // term matching: profile services, tags, slot services
-    const term = normalizedTerm;
-    if (term) {
-      const tags = safeArr(profile.serviceTags).map((t) => String(t || "").toLowerCase());
-      const servicesText = String(profile.services || "").toLowerCase();
-
-      const slotText = slots
-        .map((s) => `${s?.rawServices || ""} ${s?.services || ""}`)
-        .join(" ")
-        .toLowerCase();
-
-      const tagHit = tags.some((t) => t.includes(term));
-      const servicesHit = servicesText.includes(term);
-      const slotHit = slotText.includes(term);
-
-      if (!tagHit && !servicesHit && !slotHit) return false;
+    // keyword match
+    if (normalizedAppliedTerm) {
+      if (!helperHasKeywordMatch(helper, normalizedAppliedTerm)) return false;
     }
 
-    // price filter (safe)
+    // price filter
     if (maxPrice !== "any") {
       const max = Number(maxPrice);
       const slotsOnDate = slots.filter((s) => s?.date === selectedDate);
 
-      // If prices missing, we allow through (don’t hide helper)
       const ok = slotsOnDate.some((s) => {
-        const r = Number(
-          s?.hourlyRate ??
-            s?.rate ??
-            s?.price ??
-            s?.hourly ??
-            s?.pricePerHour ??
-            NaN
-        );
-        if (!Number.isFinite(r)) return true;
+        const r = extractRate(s);
+        if (r == null) return true; // if missing, don't hide helper
         return r <= max;
       });
 
       if (!ok) return false;
     }
 
-    // radius filter placeholder (no geo)
+    // radius is placeholder
+    void profile;
     return true;
   }
 
   const filteredHelpers = useMemo(() => {
     if (mode !== "looking") return [];
     return helpers.filter((h) => helperMatches(h));
-  }, [helpers, mode, selectedDate, normalizedTerm, maxPrice, radius]);
+  }, [helpers, mode, selectedDate, normalizedAppliedTerm, maxPrice, radius]);
+
+  // -------------------------
+  // Calendar badge counts SHOULD be reactive to filters
+  // (keyword + max price; radius still placeholder)
+  // -------------------------
+  const helperCountByDate = useMemo(() => {
+    const map = {};
+    if (mode !== "looking") return map;
+
+    helpers.forEach((helper) => {
+      // If keyword filter is active, skip helper if it doesn't match anywhere
+      if (normalizedAppliedTerm && !helperHasKeywordMatch(helper, normalizedAppliedTerm)) {
+        return;
+      }
+
+      safeArr(helper?.availabilitySlots).forEach((slot) => {
+        if (!slot?.date) return;
+
+        // price filter affects badges too
+        if (maxPrice !== "any") {
+          const max = Number(maxPrice);
+          const r = extractRate(slot);
+          if (r != null && r > max) return;
+        }
+
+        map[slot.date] = (map[slot.date] || 0) + 1;
+      });
+    });
+
+    return map;
+  }, [helpers, mode, normalizedAppliedTerm, maxPrice]);
 
   // ---------- render ----------
   return (
@@ -345,59 +329,50 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* Search + dropdown */}
-          <div style={{ marginBottom: 12, position: "relative", zIndex: 9999 }}>
+          {/* Search + suggestions (Profile-style) */}
+          <div style={{ marginBottom: 12 }}>
             <label style={styles.label}>Search</label>
-            <input
-              ref={inputRef}
-              type="text"
-              placeholder="carpenter, lawn, snow..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setShowDropdown(true);
-                setActiveIndex(-1);
-              }}
-              onFocus={() => setShowDropdown(true)}
-              onKeyDown={onSearchKeyDown}
-              style={styles.input}
-              autoComplete="off"
-            />
 
-            {mode === "looking" && showDropdown && suggestions.length > 0 && (
-              <div ref={dropdownRef} style={styles.dropdown}>
-                {suggestions.map((s, idx) => (
-                  <div
-                    key={s}
-                    onMouseDown={(e) => {
-                      e.preventDefault(); // prevent blur before click
-                      pickSuggestion(s);
-                    }}
-                    style={{
-                      ...styles.dropdownItem,
-                      background: idx === activeIndex ? "#e7f2ff" : "#fff",
-                    }}
-                  >
-                    {s}
-                  </div>
-                ))}
-              </div>
-            )}
+            <div style={{ position: "relative" }}>
+              <input
+                value={draftSearch}
+                onChange={(e) => setDraftSearch(e.target.value)}
+                style={styles.input}
+                placeholder="carpenter, lawn care, snow removal"
+                autoComplete="off"
+              />
+
+              {mode === "looking" && serviceSuggestions.length > 0 && serviceToken.length > 0 && (
+                <div style={styles.dropdown}>
+                  {serviceSuggestions.map((s) => (
+                    <div
+                      key={s}
+                      onClick={() => applyServiceSuggestion(s)}
+                      style={styles.dropdownItem}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f5f5")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                    >
+                      {s}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div style={{ marginBottom: 12 }}>
             <label style={styles.label}>Selected date</label>
             <input
               type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              value={draftSelectedDate}
+              onChange={(e) => setDraftSelectedDate(e.target.value)}
               style={styles.input}
             />
           </div>
 
           <div style={{ marginBottom: 12 }}>
             <label style={styles.label}>Distance radius</label>
-            <select value={radius} onChange={(e) => setRadius(e.target.value)} style={styles.input}>
+            <select value={draftRadius} onChange={(e) => setDraftRadius(e.target.value)} style={styles.input}>
               <option value="any">Any distance</option>
               <option value="5">Within 5 km</option>
               <option value="10">Within 10 km</option>
@@ -407,11 +382,7 @@ export default function HomePage() {
 
           <div style={{ marginBottom: 12 }}>
             <label style={styles.label}>Max price ($/hr)</label>
-            <select
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value)}
-              style={styles.input}
-            >
+            <select value={draftMaxPrice} onChange={(e) => setDraftMaxPrice(e.target.value)} style={styles.input}>
               <option value="any">Any price</option>
               <option value="20">$20/hr</option>
               <option value="30">$30/hr</option>
@@ -420,8 +391,18 @@ export default function HomePage() {
             </select>
           </div>
 
-          <div style={{ fontSize: 12, color: "#666" }}>
-            Tip: start typing and pick a keyword from the dropdown (it uses helper-entered services).
+          {/* Buttons */}
+          <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
+            <button onClick={onApplyFilters} style={styles.primaryBtn}>
+              Search
+            </button>
+            <button onClick={onResetFilters} style={styles.secondaryBtn}>
+              Reset
+            </button>
+          </div>
+
+          <div style={{ fontSize: 12, color: "#666", marginTop: 10 }}>
+            Tip: type a keyword and pick from the dropdown (same as Profile). Press <b>Search</b> to apply filters.
           </div>
         </div>
 
@@ -472,29 +453,32 @@ export default function HomePage() {
                     const dateStr = formatDate(dayDate);
                     const inMonth = dayDate.getMonth() === viewMonth.getMonth();
 
-                    const isToday = dateStr === todayStr; // steady highlight
-                    const isSelected = dateStr === selectedDate; // clicked/selected
+                    const isToday = dateStr === todayStr;      // steady highlight
+                    const isSelected = dateStr === selectedDate; // applied selected date
 
                     const helpersCount = helperCountByDate[dateStr] || 0;
 
-                    // Priority: Selected (blue) should still be visible even if it’s today.
-                    // (If you want today always win, swap order.)
                     let bg = inMonth ? "#fff" : "#f9fafb";
                     let border = "1px solid #ddd";
 
+                    // TODAY should remain yellow unless you want selected to override.
+                    // Here: selected overrides today (blue wins) like your previous behavior.
                     if (isToday) {
-                      bg = "#fff5b5"; // steady TODAY yellow
+                      bg = "#fff5b5";
                       border = "2px solid #f2c200";
                     }
                     if (isSelected) {
-                      bg = "#dbeeff"; // selected date blue
+                      bg = "#dbeeff";
                       border = "2px solid #67a9ff";
                     }
 
                     return (
                       <td
                         key={dateStr}
-                        onClick={() => setSelectedDate(dateStr)}
+                        onClick={() => {
+                          // clicking calendar picks date in *draft* first, then user can hit Search
+                          setDraftSelectedDate(dateStr);
+                        }}
                         style={{
                           ...styles.calendarTd,
                           background: bg,
@@ -513,6 +497,25 @@ export default function HomePage() {
               ))}
             </tbody>
           </table>
+
+          {/* small area under calendar so it doesn't look empty */}
+          <div style={styles.summaryBox}>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Active filters</div>
+            <div style={{ fontSize: 13, color: "#333" }}>
+              <div>
+                <b>Date:</b> {selectedDate}
+              </div>
+              <div>
+                <b>Keywords:</b> {(searchTerm || "").trim() ? searchTerm : "Any"}
+              </div>
+              <div>
+                <b>Max price:</b> {maxPrice === "any" ? "Any" : `$${maxPrice}/hr`}
+              </div>
+              <div>
+                <b>Distance:</b> {radius === "any" ? "Any" : `${radius} km`}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* RIGHT */}
@@ -529,16 +532,14 @@ export default function HomePage() {
             <p style={{ fontSize: 13 }}>
               No helpers found for this selection.
               <br />
-              Try a dropdown keyword + a date with availabilities.
+              Try a keyword + press <b>Search</b>.
             </p>
           )}
 
           {mode === "looking" &&
             filteredHelpers.map((helper) => {
               const profile = helper?.profile || {};
-              const slots = safeArr(helper?.availabilitySlots).filter(
-                (slot) => slot?.date === selectedDate
-              );
+              const slots = safeArr(helper?.availabilitySlots).filter((slot) => slot?.date === selectedDate);
 
               const rawName = profile.displayName || helper?.name || "Helper";
               const displayName = formatHelperName(rawName);
@@ -562,6 +563,11 @@ export default function HomePage() {
                           <li key={slot?._id || slot?.id || `${slot?.startTime}-${slot?.endTime}`}>
                             {slot?.startTime}–{slot?.endTime}{" "}
                             {slot?.rawServices && `(${slot.rawServices})`}
+                            {(() => {
+                              const r = extractRate(slot);
+                              if (r == null) return null;
+                              return <span style={{ color: "#555" }}> — ${r}/hr</span>;
+                            })()}
                           </li>
                         ))}
                       </ul>
@@ -580,7 +586,7 @@ export default function HomePage() {
 const styles = {
   pageWrap: {
     background: "#f0f2f5",
-    minHeight: "calc(100vh - 80px)", // fill below header
+    minHeight: "calc(100vh - 80px)",
     padding: 20,
     boxSizing: "border-box",
   },
@@ -588,7 +594,6 @@ const styles = {
     display: "flex",
     gap: 16,
     alignItems: "stretch",
-    height: "100%",
   },
 
   panelLeft: {
@@ -606,7 +611,6 @@ const styles = {
     borderRadius: 8,
     border: "1px solid #e0e4ee",
     boxSizing: "border-box",
-    minHeight: "calc(100vh - 120px)",
   },
   panelRight: {
     width: 280,
@@ -642,7 +646,7 @@ const styles = {
   input: {
     width: "100%",
     padding: 8,
-    borderRadius: 4,
+    borderRadius: 6,
     border: "1px solid #ccc",
     fontSize: 14,
     boxSizing: "border-box",
@@ -650,23 +654,44 @@ const styles = {
 
   dropdown: {
     position: "absolute",
-    top: "calc(100% + 6px)",
+    top: "100%",
     left: 0,
     right: 0,
     background: "#fff",
     border: "1px solid #ccc",
     borderRadius: 6,
-    overflow: "hidden",
-    boxShadow: "0 8px 18px rgba(0,0,0,0.10)",
-    zIndex: 99999,
-    maxHeight: 260,
+    zIndex: 9999,
+    maxHeight: 180,
     overflowY: "auto",
+    marginTop: 6,
+    boxShadow: "0 8px 18px rgba(0,0,0,0.10)",
   },
   dropdownItem: {
-    padding: 10,
+    padding: "8px 10px",
     cursor: "pointer",
-    borderBottom: "1px solid #f1f1f1",
-    fontSize: 14,
+    borderBottom: "1px solid #eee",
+    background: "#fff",
+  },
+
+  primaryBtn: {
+    flex: 1,
+    padding: "10px 14px",
+    background: "#003f63",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontWeight: 800,
+  },
+  secondaryBtn: {
+    flex: 1,
+    padding: "10px 14px",
+    background: "#fff",
+    color: "#003f63",
+    border: "1px solid #003f63",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontWeight: 800,
   },
 
   monthNav: {
@@ -723,5 +748,13 @@ const styles = {
     marginBottom: 10,
     border: "1px solid #ddd",
     fontSize: 12,
+  },
+
+  summaryBox: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 10,
+    border: "1px solid #e0e4ee",
+    background: "#f6f8fb",
   },
 };
