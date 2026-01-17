@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { suggestServices } from "../data/serviceKeywords";
 
-// Format Date → "YYYY-MM-DD"
+// ---------------- Helpers ----------------
 function formatDate(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -10,31 +9,87 @@ function formatDate(d) {
   return `${y}-${m}-${day}`;
 }
 
-// Format name → "First L."
+// "Test Helper" -> "Test H."
 function formatHelperName(rawName) {
   if (!rawName) return "Helper";
   const parts = rawName.trim().split(/\s+/);
   if (parts.length === 1) return parts[0];
-  const first = parts[0];
-  const lastInitial = parts[1].charAt(0).toUpperCase();
-  return `${first} ${lastInitial}.`;
+  return `${parts[0]} ${parts[1].charAt(0).toUpperCase()}.`;
 }
 
-function HomePage() {
-  const [mode, setMode] = useState("looking"); // "looking" or "offering"
+// normalize text for matching
+function norm(s) {
+  return (s || "")
+    .toLowerCase()
+    .replace(/[_/\\]+/g, " ")
+    .replace(/[^\w\s-]+/g, " ") // remove punctuation (keep hyphen)
+    .replace(/[-]+/g, " ") // treat hyphen as space
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// turn "car cleaner, snow removal" => ["car cleaner", "snow removal"]
+function splitCommaList(s) {
+  return (s || "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+// unique + clean join
+function cleanJoin(list) {
+  const uniq = Array.from(new Set((list || []).map((x) => x.trim()).filter(Boolean)));
+  return uniq.join(", ");
+}
+
+// ---------------- Service bank (shared keywords) ----------------
+// Keep this list aligned with Profile + Availability keywords
+const SERVICE_BANK = [
+  "carpenter",
+  "handyman",
+  "plumber",
+  "electrician",
+  "painter",
+  "drywall",
+  "flooring",
+  "tiling",
+  "moving",
+  "junk removal",
+  "house cleaning",
+  "car cleaning",
+  "car detail",
+  "lawn",
+  "lawn care",
+  "gardener",
+  "gardening",
+  "landscaping",
+  "hedge trimming",
+  "snow",
+  "snow removal",
+  "pressure washing",
+  "window cleaning",
+  "pet sitting",
+  "dog walking",
+];
+
+// suggestions for the LAST comma-separated token
+function suggestServices(input) {
+  const token = norm(input);
+  if (!token) return [];
+  const hits = SERVICE_BANK.filter((s) => norm(s).includes(token));
+  return hits.slice(0, 8);
+}
+
+export default function HomePage() {
+  const [mode, setMode] = useState("looking"); // looking | offering
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
   const [helpers, setHelpers] = useState([]);
-  const suggestions = suggestServices(searchTerm);
 
-  // extra filters
   const [maxDistance, setMaxDistance] = useState(""); // km
   const [maxPrice, setMaxPrice] = useState(""); // $/hr
 
-  // Calendar month state
   const [currentMonth, setCurrentMonth] = useState(new Date());
-
-  // Today (for yellow highlight)
   const todayStr = formatDate(new Date());
 
   const navigate = useNavigate();
@@ -43,220 +98,178 @@ function HomePage() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem("tfh_helpers") || "[]";
-      const parsed = JSON.parse(raw);
-      setHelpers(parsed);
+      setHelpers(JSON.parse(raw));
     } catch (e) {
       console.error("Error loading tfh_helpers", e);
+      setHelpers([]);
     }
   }, []);
 
-  const normalizedTerm = searchTerm.trim().toLowerCase();
+  // --- predictive suggestions for Search ---
+  const lastToken = useMemo(() => {
+    // last comma-separated token being typed
+    const parts = (searchTerm || "").split(",");
+    return (parts[parts.length - 1] || "").trim();
+  }, [searchTerm]);
 
-  // loose matcher so "gardener" ≈ "gardening"
-  function looseMatch(text) {
-    if (!normalizedTerm) return true;
-    const t = (text || "").toLowerCase();
-    return t.includes(normalizedTerm) || normalizedTerm.includes(t);
+  const suggestions = useMemo(() => suggestServices(lastToken), [lastToken]);
+
+  function applySuggestion(s) {
+    const parts = (searchTerm || "").split(",");
+    parts[parts.length - 1] = ` ${s}`; // replace last token
+    const next = parts
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .join(", ");
+    setSearchTerm(next + ", "); // trailing ", " so user can keep adding
   }
 
-  function helperMatches(helper) {
-  const profile = helper.profile || {};
-  const tags = (profile.serviceTags || []).map((t) => (t || "").toLowerCase());
-  const slots = helper.availabilitySlots || [];
+  // Search tokens (support multiple comma separated terms)
+  const searchTokens = useMemo(() => {
+    return splitCommaList(searchTerm).map(norm).filter(Boolean);
+  }, [searchTerm]);
 
-  // ---- term matching helpers ----
-  const term = normalizedTerm;
+  // Click "I am offering"
+  function handleOfferingClick() {
+    setMode("offering");
 
-  const matchesTerm = (textOrArray) => {
-    if (!term) return true;
+    let user = null;
+    try {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) user = JSON.parse(storedUser);
+    } catch (e) {}
 
-    if (Array.isArray(textOrArray)) {
-      return textOrArray.some((t) => {
-        const v = (t || "").toLowerCase();
-        return v.includes(term) || term.includes(v);
-      });
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    navigate("/helper-availability");
+  }
+
+  // Does a helper match ANY token?
+  function helperMatchesTokens(helper) {
+    const profile = helper.profile || {};
+    const slots = helper.availabilitySlots || helper.availabilitySlots || helper.availabilitySlots || helper.availabilitySlots || helper.availabilitySlots;
+
+    // base texts
+    const profileServicesText = norm(profile.services || "");
+    const profileTags = (profile.serviceTags || []).map((t) => norm(t));
+    const profileTagText = norm((profile.serviceTags || []).join(" "));
+
+    // --- must have a slot on selected date (when looking) ---
+    if (selectedDate) {
+      const hasDate = (helper.availabilitySlots || []).some((s) => s.date === selectedDate);
+      if (!hasDate) return false;
     }
 
-    const v = (textOrArray || "").toLowerCase();
-    return v.includes(term) || term.includes(v);
-  };
-
-  const slotTermMatch = (slot) => {
-    const slotTags = (slot.services || []).map((t) => (t || "").toLowerCase());
-    return matchesTerm(slotTags) || matchesTerm(slot.rawServices || "");
-  };
-
-  // ---- 1) term must match EITHER profile OR any slot (important) ----
-  if (term) {
-    const servicesText = (profile.services || "").toLowerCase();
-    const profileMatch = matchesTerm(servicesText) || matchesTerm(tags);
-    const anySlotMatch = slots.some(slotTermMatch);
-
-    if (!profileMatch && !anySlotMatch) return false;
-  }
-
-  // ---- 2) selected date must have a matching slot ----
-  if (selectedDate) {
-    const dateOk = slots.some((slot) => {
-      if (slot.date !== selectedDate) return false;
-      if (!term) return true;
-      return slotTermMatch(slot);
-    });
-    if (!dateOk) return false;
-  }
-
-  // ---- 3) distance filter (optional) ----
-  if (maxDistance) {
-    const maxDistNum = Number(maxDistance);
-    const helperDist = profile.maxDistanceKm ?? profile.distanceKm ?? null;
-    if (helperDist != null && helperDist > maxDistNum) return false;
-  }
-
-  // ---- 4) price filter (optional) ----
-  if (maxPrice) {
-    const maxPriceNum = Number(maxPrice);
-    const rate = profile.hourlyRate ?? profile.rate ?? null;
-    if (rate != null && rate > maxPriceNum) return false;
-  }
-
-  return true;
-}
-
-    // ---- 1) services / tags match ----
-    const servicesText = (profile.services || "").toLowerCase();
-
-    const tagMatch =
-      !normalizedTerm ||
-      tags.some(
-        (tag) =>
-          tag.includes(normalizedTerm) || normalizedTerm.includes(tag)
-      );
-
-    const servicesMatch =
-      !normalizedTerm || looseMatch(servicesText) || tagMatch;
-
-    if (!servicesMatch) return false;
-
-    // ---- 2) date + slot match ----
-    if (!selectedDate) return servicesMatch;
-
-    const slotMatch = slots.some((slot) => {
-      if (slot.date !== selectedDate) return false;
-
-      if (!normalizedTerm) return true;
-
-      const slotTags = slot.services || [];
-      const tagsOk = slotTags.some(
-        (tag) =>
-          tag.includes(normalizedTerm) || normalizedTerm.includes(tag)
-      );
-
-      const rawOk = looseMatch(slot.rawServices || "");
-      return tagsOk || rawOk;
-    });
-
-    if (!slotMatch) return false;
-
-    // ---- 3) distance filter (optional) ----
+    // --- distance filter ---
     if (maxDistance) {
       const maxDistNum = Number(maxDistance);
-      const helperDist =
-        profile.maxDistanceKm ??
-        profile.distanceKm ??
-        null;
-      if (helperDist != null && helperDist > maxDistNum) {
-        return false;
-      }
+      const helperDist = profile.maxDistanceKm ?? profile.distanceKm ?? null;
+      if (helperDist != null && helperDist > maxDistNum) return false;
     }
 
-    // ---- 4) price filter (optional) ----
+    // --- price filter ---
+    // Prefer the cheapest slot price that day if present; fallback to profile hourlyRate
     if (maxPrice) {
       const maxPriceNum = Number(maxPrice);
-      const rate =
-        profile.hourlyRate ??
-        profile.rate ??
-        null;
-      if (rate != null && rate > maxPriceNum) {
-        return false;
-      }
+
+      let bestRate = null;
+
+      const daySlots = (helper.availabilitySlots || []).filter((s) => s.date === selectedDate);
+      daySlots.forEach((s) => {
+        const r = s.pricePerHour ?? s.hourlyRate ?? null;
+        if (r != null) bestRate = bestRate == null ? r : Math.min(bestRate, r);
+      });
+
+      if (bestRate == null) bestRate = profile.hourlyRate ?? profile.rate ?? null;
+
+      if (bestRate != null && bestRate > maxPriceNum) return false;
     }
 
-    return true;
+    // if no tokens, match by date + filters only
+    if (searchTokens.length === 0) return true;
+
+    // matches a single token against helper profile + slot data
+    const matchesOne = (tok) => {
+      if (!tok) return true;
+
+      // profile match
+      const profileOk =
+        profileServicesText.includes(tok) ||
+        profileTagText.includes(tok) ||
+        profileTags.some((t) => t.includes(tok) || tok.includes(t));
+
+      // slot match on selectedDate
+      const slotOk = (helper.availabilitySlots || []).some((slot) => {
+        if (slot.date !== selectedDate) return false;
+
+        const slotRaw = norm(slot.rawServices || "");
+        const slotTags = (slot.services || []).map((t) => norm(t));
+        const slotTagText = norm((slot.services || []).join(" "));
+
+        return (
+          slotRaw.includes(tok) ||
+          slotTagText.includes(tok) ||
+          slotTags.some((t) => t.includes(tok) || tok.includes(t))
+        );
+      });
+
+      return profileOk || slotOk;
+    };
+
+    // ANY token can match
+    return searchTokens.some(matchesOne);
   }
 
-  const filteredHelpers =
-    mode === "looking" ? helpers.filter(helperMatches) : [];
+  const filteredHelpers = useMemo(() => {
+    if (mode !== "looking") return [];
+    return (helpers || []).filter(helperMatchesTokens);
+  }, [helpers, mode, selectedDate, maxDistance, maxPrice, searchTokens]);
 
-  // 👉 When user clicks "I am offering"
-function handleOfferingClick() {
-  // visually show the tab as selected
-  setMode("offering");
-
-  let user = null;
-  try {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      user = JSON.parse(storedUser);
-    }
-  } catch (e) {
-    console.error("Error reading user from localStorage", e);
-  }
-
-  // Not logged in → go to login
-  if (!user) {
-    navigate("/login");
-    return;
-  }
-
-  // Logged in (any role) → go to helper availability
-  navigate("/helper-availability");
-}
-
-  // ---- Calendar construction ----
+  // ---------------- Calendar ----------------
   const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth(); // 0-based
+  const month = currentMonth.getMonth();
   const firstDayOfMonth = new Date(year, month, 1);
   const lastDayOfMonth = new Date(year, month + 1, 0);
-  const firstWeekday = firstDayOfMonth.getDay(); // 0 = Sunday
+  const firstWeekday = firstDayOfMonth.getDay();
   const daysInMonth = lastDayOfMonth.getDate();
 
-  // Map date → how many helpers have slots that day
-  const dateHasHelpers = {};
-  helpers.forEach((helper) => {
-    (helper.availabilitySlots || []).forEach((slot) => {
-      const d = slot.date;
-      if (!d) return;
-      dateHasHelpers[d] = (dateHasHelpers[d] || 0) + 1;
+  const dateHasHelpers = useMemo(() => {
+    const map = {};
+    (helpers || []).forEach((h) => {
+      (h.availabilitySlots || []).forEach((slot) => {
+        const d = slot.date;
+        if (!d) return;
+        map[d] = (map[d] || 0) + 1;
+      });
     });
-  });
+    return map;
+  }, [helpers]);
 
   const weeks = [];
   let currentDay = 1 - firstWeekday;
-
   while (currentDay <= daysInMonth) {
     const weekDays = [];
     for (let i = 0; i < 7; i++) {
-      if (currentDay < 1 || currentDay > daysInMonth) {
-        weekDays.push(null);
-      } else {
-        weekDays.push(currentDay);
-      }
+      weekDays.push(currentDay < 1 || currentDay > daysInMonth ? null : currentDay);
       currentDay++;
     }
     weeks.push(weekDays);
   }
 
   function changeMonth(delta) {
-    const newMonth = new Date(year, month + delta, 1);
-    setCurrentMonth(newMonth);
+    setCurrentMonth(new Date(year, month + delta, 1));
   }
 
   function handleDayClick(day) {
     if (!day) return;
-    const newDate = new Date(year, month, day);
-    const formatted = formatDate(newDate);
-    setSelectedDate(formatted);
+    setSelectedDate(formatDate(new Date(year, month, day)));
   }
+
+  // ---------------- UI styles ----------------
+  const labelStyle = { display: "block", fontSize: 12, fontWeight: 700, marginBottom: 6, color: "#1b2a3a" };
+  const inputStyle = { width: "100%", padding: "10px 12px", borderRadius: 6, border: "1px solid #cfd7e6", outline: "none" };
 
   return (
     <div
@@ -264,7 +277,7 @@ function handleOfferingClick() {
         display: "flex",
         gap: "24px",
         alignItems: "stretch",
-        height: "calc(100vh - 130px)", // fill almost all remaining screen
+        height: "calc(100vh - 130px)",
         paddingBottom: "24px",
         boxSizing: "border-box",
       }}
@@ -279,43 +292,37 @@ function handleOfferingClick() {
           border: "1px solid #e0e4ee",
           display: "flex",
           flexDirection: "column",
-          height: "100%",
         }}
       >
-        {/* Mode toggle */}
-        <div
-          style={{
-            display: "flex",
-            marginBottom: "16px",
-            borderRadius: "999px",
-            overflow: "hidden",
-            border: "1px solid #ccc",
-          }}
-        >
+        {/* Mode tabs */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
           <button
             onClick={() => setMode("looking")}
             style={{
               flex: 1,
-              padding: "8px",
-              border: "none",
+              padding: "10px 12px",
+              borderRadius: 999,
+              border: "1px solid #cfd7e6",
+              background: mode === "looking" ? "#0f4c73" : "#fff",
+              color: mode === "looking" ? "#fff" : "#0f4c73",
+              fontWeight: 700,
               cursor: "pointer",
-              background: mode === "looking" ? "#003f63" : "rgba(0,0,0,0)",
-              color: mode === "looking" ? "#fff" : "#003f63",
-              fontSize: "13px",
             }}
           >
             I am looking for
           </button>
+
           <button
             onClick={handleOfferingClick}
             style={{
               flex: 1,
-              padding: "8px",
-              border: "none",
+              padding: "10px 12px",
+              borderRadius: 999,
+              border: "1px solid #cfd7e6",
+              background: mode === "offering" ? "#0f4c73" : "#fff",
+              color: mode === "offering" ? "#fff" : "#0f4c73",
+              fontWeight: 700,
               cursor: "pointer",
-              background: mode === "offering" ? "#003f63" : "rgba(0,0,0,0)",
-              color: mode === "offering" ? "#fff" : "#003f63",
-              fontSize: "13px",
             }}
           >
             I am offering
@@ -323,74 +330,63 @@ function handleOfferingClick() {
         </div>
 
         {/* Search */}
-<div style={{ marginBottom: "12px", position: "relative" }}>
-  <label style={labelStyle}>Search</label>
+        <div style={{ marginBottom: "12px", position: "relative" }}>
+          <label style={labelStyle}>Search</label>
+          <input
+            type="text"
+            placeholder="carpenter, lawn, snow..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={inputStyle}
+          />
 
-  <input
-    type="text"
-    placeholder="carpenter, lawn, snow..."
-    value={searchTerm}
-    onChange={(e) => setSearchTerm(e.target.value)}
-    style={inputStyle}
-  />
-
-  {suggestions.length > 0 && (
-    <div
-      style={{
-        position: "absolute",
-        top: "100%",
-        left: 0,
-        right: 0,
-        background: "#fff",
-        border: "1px solid #ccc",
-        borderRadius: 4,
-        zIndex: 9999,
-        maxHeight: 180,
-        overflowY: "auto",
-      }}
-    >
-      {suggestions.map((s) => (
-        <div
-          key={s}
-          onClick={() => setSearchTerm(s)}
-          style={{
-            padding: "6px 10px",
-            cursor: "pointer",
-            borderBottom: "1px solid #eee",
-          }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.background = "#f5f5f5")
-          }
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.background = "#fff")
-          }
-        >
-          {s}
+          {/* Suggestions dropdown */}
+          {suggestions.length > 0 && (
+            <div
+              style={{
+                position: "absolute",
+                top: 68,
+                left: 0,
+                right: 0,
+                background: "#fff",
+                border: "1px solid #cfd7e6",
+                borderRadius: 6,
+                boxShadow: "0 10px 20px rgba(0,0,0,0.08)",
+                zIndex: 50,
+                overflow: "hidden",
+              }}
+            >
+              {suggestions.map((s) => (
+                <div
+                  key={s}
+                  onMouseDown={(e) => {
+                    // onMouseDown so it applies before input loses focus
+                    e.preventDefault();
+                    applySuggestion(s);
+                  }}
+                  style={{
+                    padding: "10px 12px",
+                    cursor: "pointer",
+                    borderBottom: "1px solid #eef2f7",
+                  }}
+                >
+                  {s}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      ))}
-    </div>
-  )}
-</div>
 
         {/* Selected date */}
         <div style={{ marginBottom: "12px" }}>
           <label style={labelStyle}>Selected date</label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            style={inputStyle}
-          />
+          <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} style={inputStyle} />
         </div>
 
-        {/* Distance radius filter */}
+        {/* Distance */}
         <div style={{ marginBottom: "12px" }}>
           <label style={labelStyle}>Distance radius</label>
-          <select
-            value={maxDistance}
-            onChange={(e) => setMaxDistance(e.target.value)}
-            style={inputStyle}
-          >
+          <select value={maxDistance} onChange={(e) => setMaxDistance(e.target.value)} style={inputStyle}>
             <option value="">Any distance</option>
             <option value="5">Within 5 km</option>
             <option value="10">Within 10 km</option>
@@ -399,150 +395,101 @@ function handleOfferingClick() {
           </select>
         </div>
 
-        {/* Max price filter */}
+        {/* Price */}
         <div style={{ marginBottom: "12px" }}>
           <label style={labelStyle}>Max price ($/hr)</label>
-          <select
-            value={maxPrice}
-            onChange={(e) => setMaxPrice(e.target.value)}
-            style={inputStyle}
-          >
+          <select value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} style={inputStyle}>
             <option value="">Any price</option>
             <option value="25">Up to $25/hr</option>
+            <option value="35">Up to $35/hr</option>
             <option value="50">Up to $50/hr</option>
             <option value="75">Up to $75/hr</option>
             <option value="100">Up to $100/hr</option>
           </select>
         </div>
 
-        <p style={{ fontSize: 11, color: "#555", marginTop: "8px" }}>
-          Tip: choose a date where a helper has set availability and type a
-          keyword matching their services. Use filters to narrow down results.
-        </p>
+        <div style={{ fontSize: 12, color: "#516071", marginTop: 8 }}>
+          Tip: choose a date where a helper has set availability, then type a keyword matching their services. Use filters to narrow results.
+        </div>
       </div>
 
-      {/* MIDDLE: Calendar */}
+      {/* CENTER: Calendar */}
       <div
         style={{
           flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
+          background: "#fff",
+          borderRadius: "8px",
+          border: "1px solid #e0e4ee",
+          padding: "16px",
+          overflow: "auto",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            marginBottom: "10px",
-            gap: "12px",
-          }}
-        >
-          <button onClick={() => changeMonth(-1)} style={navButtonStyle}>
-            {"<"}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 12 }}>
+          <button
+            onClick={() => changeMonth(-1)}
+            style={{ padding: "6px 10px", border: "1px solid #cfd7e6", borderRadius: 6, background: "#fff", cursor: "pointer" }}
+          >
+            &lt;
           </button>
-          <h2 style={{ margin: 0 }}>
-            {currentMonth.toLocaleString("default", {
-              month: "long",
-            })}{" "}
-            {year}
-          </h2>
-          <button onClick={() => changeMonth(1)} style={navButtonStyle}>
-            {">"}
+          <div style={{ fontSize: 26, fontWeight: 800 }}>
+            {currentMonth.toLocaleString("en-US", { month: "long" })} {year}
+          </div>
+          <button
+            onClick={() => changeMonth(1)}
+            style={{ padding: "6px 10px", border: "1px solid #cfd7e6", borderRadius: 6, background: "#fff", cursor: "pointer" }}
+          >
+            &gt;
           </button>
         </div>
 
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            background: "#fff",
-            borderRadius: "8px",
-            overflow: "hidden",
-            border: "1px solid #e0e4ee",
-            flex: 1,
-          }}
-        >
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
-            <tr style={{ background: "#f0f3fa" }}>
+            <tr>
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                <th
-                  key={d}
-                  style={{
-                    padding: "6px 0",
-                    fontSize: "12px",
-                    borderBottom: "1px solid #e0e4ee",
-                  }}
-                >
+                <th key={d} style={{ padding: "8px", textAlign: "center", background: "#f0f4fa", fontWeight: 800 }}>
                   {d}
                 </th>
               ))}
             </tr>
           </thead>
+
           <tbody>
             {weeks.map((week, wi) => (
               <tr key={wi}>
                 {week.map((day, di) => {
                   if (!day) {
-                    return (
-                      <td
-                        key={di}
-                        style={{
-                          height: "60px",
-                          border: "1px solid #f2f2f2",
-                        }}
-                      />
-                    );
+                    return <td key={di} style={{ border: "1px solid #eef2f7", height: 90 }} />;
                   }
 
-                  const dateObj = new Date(year, month, day);
-                  const dateStr = formatDate(dateObj);
-                  const isSelected = dateStr === selectedDate;
-                  const isToday = dateStr === todayStr;
-                  const helpersCount = dateHasHelpers[dateStr] || 0;
+                  const dateStr = formatDate(new Date(year, month, day));
+                  const has = dateHasHelpers[dateStr] || 0;
 
-                  const baseBg = isSelected
-                    ? "#e1f0ff"
-                    : isToday
-                    ? "#fff7c2" // TODAY background
-                    : "#fff";
+                  const isSelected = selectedDate === dateStr;
+                  const isToday = todayStr === dateStr;
 
-                  const borderColor = isToday ? "#f2b600" : "#f2f2f2";
+                  let bg = "#fff";
+                  if (isToday) bg = "#fff6cc";
+                  if (has > 0) bg = "#e7f1ff";
+                  if (isSelected) bg = "#cfe5ff";
 
                   return (
                     <td
                       key={di}
                       onClick={() => handleDayClick(day)}
                       style={{
-                        position: "relative",
-                        height: "60px",
-                        border: `2px solid ${borderColor}`,
-                        textAlign: "right",
-                        padding: "4px 6px",
+                        border: "1px solid #eef2f7",
+                        height: 90,
+                        verticalAlign: "top",
+                        padding: 8,
                         cursor: "pointer",
-                        background: baseBg,
-                        color: isSelected ? "#003f63" : "#333",
-                        fontSize: "12px",
-                        boxSizing: "border-box",
+                        background: bg,
+                        outline: isToday ? "2px solid #f2c94c" : "none",
                       }}
                     >
-                      {day}
-
-                      {helpersCount > 0 && (
-                        <div
-                          style={{
-                            position: "absolute",
-                            left: "6px",
-                            bottom: "4px",
-                            fontSize: "10px",
-                            color: "#003f63",
-                            background: "#e1f0ff",
-                            borderRadius: "999px",
-                            padding: "1px 5px",
-                          }}
-                        >
-                          {helpersCount} avail
+                      <div style={{ fontWeight: 800, marginBottom: 6 }}>{day}</div>
+                      {has > 0 && (
+                        <div style={{ fontSize: 12, color: "#1b4f8a", fontWeight: 700 }}>
+                          {has} avail
                         </div>
                       )}
                     </td>
@@ -557,121 +504,73 @@ function handleOfferingClick() {
       {/* RIGHT: Available helpers */}
       <div
         style={{
-          width: "260px",
+          width: "320px",
           background: "#f6f8fb",
           padding: "16px",
           borderRadius: "8px",
           border: "1px solid #e0e4ee",
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          maxHeight: "100%",
-          overflowY: "auto",
+          overflow: "auto",
         }}
       >
-        <h3 style={{ marginTop: 0 }}>Available helpers</h3>
+        <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 12 }}>Available helpers</div>
 
-        {mode === "offering" && (
-          <p style={{ fontSize: 13 }}>
-            Helper view: switch to{" "}
-            <strong>&quot;I am looking for&quot;</strong> to search helpers as a
-            customer.
-          </p>
-        )}
+        {filteredHelpers.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#516071" }}>
+            No helpers match your search for this date.
+          </div>
+        ) : (
+          filteredHelpers.map((h, idx) => {
+            const profile = h.profile || {};
+            const fullName = profile.publicName || profile.name || "Helper";
+            const displayName = formatHelperName(fullName);
 
-        {mode === "looking" && filteredHelpers.length === 0 && (
-          <p style={{ fontSize: 13 }}>
-            No helpers found for this selection.
-            <br />
-            Try another keyword or date.
-          </p>
-        )}
+            const city = profile.city || profile.location || "";
+            const servicesList = splitCommaList(profile.services || "");
+            const cleanServices = cleanJoin(servicesList);
 
-        {mode === "looking" &&
-          filteredHelpers.map((helper) => {
-            const profile = helper.profile || {};
-            const slots = (helper.availabilitySlots || []).filter(
-              (slot) => slot.date === selectedDate
-            );
-
-            const rawName = profile.displayName || helper.name || "Helper";
-            const displayName = formatHelperName(rawName);
-function cleanListText(s) {
-  return (s || "").replace(/,\s*$/, "").trim(); // removes trailing comma/spaces
-}
+            const daySlots = (h.availabilitySlots || []).filter((s) => s.date === selectedDate);
 
             return (
               <div
-                key={helper.id}
+                key={idx}
                 style={{
                   background: "#fff",
-                  borderRadius: "6px",
-                  padding: "10px",
-                  marginBottom: "10px",
-                  border: "1px solid #ddd",
-                  fontSize: "12px",
+                  border: "1px solid #e0e4ee",
+                  borderRadius: 8,
+                  padding: 12,
+                  marginBottom: 12,
                 }}
               >
-                <strong>{displayName}</strong>
-                <div style={{ color: "#555", marginTop: "2px" }}>
-                  {profile.city || "Location not specified"}
-                </div>
-                {profile.services && (
-                  <div
-                    style={{
-                      marginTop: "4px",
-                      color: "#003f63",
-                    }}
-                  >
-                    {profile.services}
+                <div style={{ fontSize: 15, fontWeight: 900 }}>{displayName}</div>
+                {city && <div style={{ fontSize: 12, color: "#516071" }}>{city}</div>}
+
+                {cleanServices && (
+                  <div style={{ fontSize: 13, marginTop: 8 }}>
+                    <span style={{ fontWeight: 800 }}>Services:</span> {cleanServices}
                   </div>
                 )}
-                {slots.length > 0 && (
-                  <div style={{ marginTop: "4px" }}>
-                    <strong>Available:</strong>
-                    <ul
-                      style={{
-                        paddingLeft: "18px",
-                        margin: "2px 0",
-                      }}
-                    >
-                      {slots.map((slot) => (
-                        <li key={slot.id}>
-                          {slot.startTime}–{slot.endTime}{" "}
-                          {slot.rawServices && `(${slot.rawServices})`}
+
+                <div style={{ fontSize: 13, marginTop: 8 }}>
+                  <span style={{ fontWeight: 800 }}>Available:</span>
+                  <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+                    {daySlots.map((s, i) => {
+                      const serviceText = cleanJoin(splitCommaList(s.rawServices || ""));
+                      const rate = s.pricePerHour ?? s.hourlyRate ?? null;
+                      return (
+                        <li key={i} style={{ marginBottom: 4 }}>
+                          {s.start || "??"}–{s.end || "??"}{" "}
+                          {serviceText ? `(${serviceText})` : ""}
+                          {rate != null ? ` — $${rate}/hr` : ""}
                         </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                      );
+                    })}
+                  </ul>
+                </div>
               </div>
             );
-          })}
+          })
+        )}
       </div>
     </div>
   );
 }
-
-const labelStyle = {
-  display: "block",
-  marginBottom: "4px",
-  fontSize: "13px",
-};
-
-const inputStyle = {
-  width: "100%",
-  padding: "8px",
-  borderRadius: "4px",
-  border: "1px solid #ccc",
-  fontSize: "14px",
-};
-
-const navButtonStyle = {
-  border: "1px solid #ccc",
-  background: "#fff",
-  borderRadius: "4px",
-  cursor: "pointer",
-  padding: "4px 8px",
-};
-
-export default HomePage;
