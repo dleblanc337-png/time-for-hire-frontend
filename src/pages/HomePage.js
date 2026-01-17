@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-
+import { suggestServices } from "../data/serviceKeywords";
 /**
  * HomePage.js (full file)
  * - TODAY highlight is steady (yellow) independent from selected date.
