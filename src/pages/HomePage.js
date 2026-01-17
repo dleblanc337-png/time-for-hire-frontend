@@ -216,7 +216,38 @@ export default function HomePage() {
         const url = joinUrl(API_BASE, "/api/helpers/public");
         const data = await fetchJson(url);
         if (!alive) return;
-        setHelpers(Array.isArray(data) ? data : []);
+        // Merge backend helpers with localStorage helpers (for availability just added)
+const localHelpers = (() => {
+  try {
+    return JSON.parse(localStorage.getItem("tfh_helpers") || "[]");
+  } catch {
+    return [];
+  }
+})();
+
+// Normalize local helpers to match backend shape
+const normalizedLocal = localHelpers.map((h) => ({
+  _id: h.id || h.email,
+  profile: h.profile || {},
+  availabilitySlots: Array.isArray(h.availabilitySlots) ? h.availabilitySlots : [],
+}));
+
+const merged = [...(Array.isArray(data) ? data : [])];
+
+// Add / overwrite with local helpers (email/id match)
+normalizedLocal.forEach((lh) => {
+  const idx = merged.findIndex(
+    (bh) => bh?._id === lh._id || bh?.email === lh._id
+  );
+  if (idx >= 0) {
+    merged[idx] = { ...merged[idx], availabilitySlots: lh.availabilitySlots };
+  } else {
+    merged.push(lh);
+  }
+});
+
+setHelpers(merged);
+
       } catch (err) {
         console.error("HomePage: failed to load public helpers:", err);
         if (!alive) return;
