@@ -60,9 +60,67 @@ function HomePage() {
   }
 
   function helperMatches(helper) {
-    const profile = helper.profile || {};
-    const tags = profile.serviceTags || [];
-    const slots = helper.availabilitySlots || [];
+  const profile = helper.profile || {};
+  const tags = (profile.serviceTags || []).map((t) => (t || "").toLowerCase());
+  const slots = helper.availabilitySlots || [];
+
+  // ---- term matching helpers ----
+  const term = normalizedTerm;
+
+  const matchesTerm = (textOrArray) => {
+    if (!term) return true;
+
+    if (Array.isArray(textOrArray)) {
+      return textOrArray.some((t) => {
+        const v = (t || "").toLowerCase();
+        return v.includes(term) || term.includes(v);
+      });
+    }
+
+    const v = (textOrArray || "").toLowerCase();
+    return v.includes(term) || term.includes(v);
+  };
+
+  const slotTermMatch = (slot) => {
+    const slotTags = (slot.services || []).map((t) => (t || "").toLowerCase());
+    return matchesTerm(slotTags) || matchesTerm(slot.rawServices || "");
+  };
+
+  // ---- 1) term must match EITHER profile OR any slot (important) ----
+  if (term) {
+    const servicesText = (profile.services || "").toLowerCase();
+    const profileMatch = matchesTerm(servicesText) || matchesTerm(tags);
+    const anySlotMatch = slots.some(slotTermMatch);
+
+    if (!profileMatch && !anySlotMatch) return false;
+  }
+
+  // ---- 2) selected date must have a matching slot ----
+  if (selectedDate) {
+    const dateOk = slots.some((slot) => {
+      if (slot.date !== selectedDate) return false;
+      if (!term) return true;
+      return slotTermMatch(slot);
+    });
+    if (!dateOk) return false;
+  }
+
+  // ---- 3) distance filter (optional) ----
+  if (maxDistance) {
+    const maxDistNum = Number(maxDistance);
+    const helperDist = profile.maxDistanceKm ?? profile.distanceKm ?? null;
+    if (helperDist != null && helperDist > maxDistNum) return false;
+  }
+
+  // ---- 4) price filter (optional) ----
+  if (maxPrice) {
+    const maxPriceNum = Number(maxPrice);
+    const rate = profile.hourlyRate ?? profile.rate ?? null;
+    if (rate != null && rate > maxPriceNum) return false;
+  }
+
+  return true;
+}
 
     // ---- 1) services / tags match ----
     const servicesText = (profile.services || "").toLowerCase();
@@ -538,6 +596,9 @@ function handleOfferingClick() {
 
             const rawName = profile.displayName || helper.name || "Helper";
             const displayName = formatHelperName(rawName);
+function cleanListText(s) {
+  return (s || "").replace(/,\s*$/, "").trim(); // removes trailing comma/spaces
+}
 
             return (
               <div
